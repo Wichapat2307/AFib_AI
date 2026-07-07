@@ -100,7 +100,14 @@ CSS = f"""
   [data-testid="stSidebar"] .stRadio label span {{ font-size: 0.83rem !important; color: {COLORS["text_mid"]} !important; }}
   [data-testid="stSidebar"] .stSelectbox label {{ font-size: 0.75rem !important; color: {COLORS["text_dim"]} !important; text-transform: uppercase !important; letter-spacing: 0.08em !important; }}
   [data-testid="stSidebar"] [data-baseweb="select"] {{ background: {COLORS["panel2"]} !important; border-color: {COLORS["border"]} !important; }}
-  [data-testid="stSidebar"] [data-baseweb="select"] * {{ background: {COLORS["panel2"]} !important; color: {COLORS["text"]} !important; }}
+  [data-testid="stSidebar"] [data-baseweb="select"] > div {{ background: {COLORS["panel2"]} !important; border-color: {COLORS["border"]} !important; }}
+  [data-testid="stSidebar"] [data-baseweb="select"] * {{ background: {COLORS["panel2"]} !important; color: {COLORS["text"]} !important; -webkit-text-fill-color: {COLORS["text"]} !important; fill: {COLORS["text"]} !important; }}
+  [data-testid="stSidebar"] [data-baseweb="select"] svg {{ fill: {COLORS["text_mid"]} !important; }}
+  div[data-baseweb="popover"] [data-baseweb="menu"] {{ background: {COLORS["panel2"]} !important; border: 1px solid {COLORS["border"]} !important; }}
+  div[data-baseweb="popover"] [data-baseweb="menu"] * {{ background: {COLORS["panel2"]} !important; color: {COLORS["text"]} !important; -webkit-text-fill-color: {COLORS["text"]} !important; }}
+  div[data-baseweb="popover"] li[role="option"]:hover,
+  div[data-baseweb="popover"] li[aria-selected="true"] {{ background: {COLORS["border_light"]} !important; }}
+  div[data-baseweb="popover"] li[aria-selected="true"] * {{ background: {COLORS["border_light"]} !important; }}
   [data-testid="stSidebar"] .stNumberInput label {{ font-size: 0.75rem !important; color: {COLORS["text_dim"]} !important; text-transform: uppercase !important; letter-spacing: 0.08em !important; }}
   [data-testid="stSidebar"] .stNumberInput > div > div {{ background: {COLORS["panel2"]} !important; border: 1px solid {COLORS["border"]} !important; border-radius: 8px !important; }}
   [data-testid="stSidebar"] .stNumberInput input {{ background: {COLORS["panel2"]} !important; color: {COLORS["text"]} !important; -webkit-text-fill-color: {COLORS["text"]} !important; }}
@@ -109,7 +116,9 @@ CSS = f"""
 
   .stTabs [data-baseweb="tab-list"] {{ background: {COLORS["panel"]}; border-bottom: 1px solid {COLORS["border"]}; padding: 0 1.5rem; gap: 0; }}
   .stTabs [data-baseweb="tab"] {{ color: {COLORS["text_mid"]} !important; font-family: 'Inter', sans-serif !important; font-size: 0.78rem !important; font-weight: 500 !important; letter-spacing: 0.07em !important; text-transform: uppercase !important; padding: 0.9rem 1.4rem !important; border-bottom: 2px solid transparent !important; margin-bottom: -1px !important; background: transparent !important; }}
+  .stTabs [data-baseweb="tab"] * {{ color: {COLORS["text_mid"]} !important; }}
   .stTabs [aria-selected="true"] {{ color: {COLORS["accent"]} !important; border-bottom: 2px solid {COLORS["accent"]} !important; }}
+  .stTabs [aria-selected="true"] * {{ color: {COLORS["accent"]} !important; }}
   .stTabs [data-baseweb="tab-panel"] {{ padding: 1.5rem 2rem !important; background: {COLORS["bg"]}; }}
 
   [data-testid="metric-container"] {{ background: {COLORS["panel"]}; border: 1px solid {COLORS["border"]}; border-radius: 10px; padding: 1rem !important; }}
@@ -404,8 +413,8 @@ def plot_ecg(signal, peaks, fs=FS, title="ECG Signal", is_afib=False):
             minor=dict(dtick=0.1, gridcolor=COLORS["ecg_grid_min"], showgrid=True),
             tickfont=dict(family="JetBrains Mono", size=10, color=COLORS["text_mid"]),
         ),
-        legend=dict(bgcolor="rgba(15,31,53,0.8)", bordercolor=COLORS["border"],
-                    borderwidth=1, font=dict(family="Inter", size=11, color=COLORS["text"])),
+        legend=dict(bgcolor="rgba(255,255,255,0.92)", bordercolor=COLORS["border_light"],
+                    borderwidth=1.5, font=dict(family="Inter", size=11, color=COLORS["text"])),
         hovermode="x unified",
     )
     return fig
@@ -587,7 +596,7 @@ def main():
         st.markdown(f"""
         <div style='padding:1rem 0 0.8rem;'>
           <div style='font-size:1.8rem; margin-bottom:6px;'>🫀</div>
-          <div style='font-family:"Sora",sans-serif; font-size:1.3rem; color:white;
+          <div style='font-family:"Sora",sans-serif; font-size:1.3rem; color:{COLORS["text"]};
                       font-weight:700; line-height:1;'>CardioSense</div>
           <div style='font-family:"JetBrains Mono",monospace; font-size:0.55rem;
                       color:{COLORS["text_dim"]}; letter-spacing:0.12em; margin-top:4px;'>
@@ -672,7 +681,7 @@ def main():
       <div style='display:flex; align-items:center; gap:12px;'>
         <span style='font-size:1.6rem;'>🫀</span>
         <div>
-          <span style='font-family:"Sora",sans-serif; font-size:1.25rem; color:white; font-weight:700;'>
+          <span style='font-family:"Sora",sans-serif; font-size:1.25rem; color:{COLORS["text"]}; font-weight:700;'>
             CardioSense
           </span>
         </div>
@@ -720,11 +729,11 @@ def main():
             extra_html = f"""
 <div>
 <div class="cs-label">Source Record</div>
-<div style="font-size: 1.1rem; font-weight: 600; color: {COLORS['white']};">MIT-BIH {demo_meta['record']}</div>
+<div style="font-size: 1.1rem; font-weight: 600; color: {COLORS['text']};">MIT-BIH {demo_meta['record']}</div>
 </div>
 <div>
 <div class="cs-label">Original Time</div>
-<div style="font-size: 1.1rem; font-weight: 600; font-family: 'JetBrains Mono', monospace; color: {COLORS['white']};">{time_display}</div>
+<div style="font-size: 1.1rem; font-weight: 600; font-family: 'JetBrains Mono', monospace; color: {COLORS['text']};">{time_display}</div>
 </div>
 """
         else:
@@ -734,16 +743,16 @@ def main():
 <div class="cs-card" style="display: flex; gap: 3rem; align-items: center; padding: 1rem 1.5rem; flex-wrap: wrap;">
 <div>
 <div class="cs-label">File / Label</div>
-<div style="font-size: 1.1rem; font-weight: 600; color: {COLORS['white']};">{signal_label}</div>
+<div style="font-size: 1.1rem; font-weight: 600; color: {COLORS['text']};">{signal_label}</div>
 </div>
 {extra_html}
 <div>
 <div class="cs-label">Segment Length</div>
-<div style="font-size: 1.1rem; font-weight: 600; font-family: 'JetBrains Mono', monospace; color: {COLORS['white']};">{duration_str}</div>
+<div style="font-size: 1.1rem; font-weight: 600; font-family: 'JetBrains Mono', monospace; color: {COLORS['text']};">{duration_str}</div>
 </div>
 <div>
 <div class="cs-label">Sampling Rate</div>
-<div style="font-size: 1.1rem; font-weight: 600; font-family: 'JetBrains Mono', monospace; color: {COLORS['white']};">{fs_input} Hz</div>
+<div style="font-size: 1.1rem; font-weight: 600; font-family: 'JetBrains Mono', monospace; color: {COLORS['text']};">{fs_input} Hz</div>
 </div>
 </div>
 """, unsafe_allow_html=True)
@@ -834,7 +843,7 @@ def main():
             else:
                 # final_prob = mean of the probabilities from every model that loaded
                 prob = float(np.mean(probs))
-                threshold = 0.5
+                threshold = 0.3
                 label = "AFib" if prob >= threshold else "Normal"
                 method_note = f"Ensemble — mean of {len(probs)}/3 models"
 
