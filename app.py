@@ -63,76 +63,76 @@ st.set_page_config(
 # COLOR PALETTE
 # ═══════════════════════════════════════════════════════════════════════════
 COLORS = {
-    "bg":           "#050b12",
-    "panel":        "#080f18",
-    "panel2":       "#0c1620",
-    "border":       "#1a2d3d",
-    "border_light": "#243d55",
-    "text":         "#c8dde8",
-    "text_mid":     "#7a9bb8",
-    "text_dim":     "#3a5a78",
-    "accent":       "#2ab5b5",
-    "accent2":      "#1e6fa8",
+    "bg":           "#f6faf7",
+    "panel":        "#ffffff",
+    "panel2":       "#eef6f1",
+    "border":       "#d9e8dd",
+    "border_light": "#bfe0cb",
+    "text":         "#173023",
+    "text_mid":     "#5b7568",
+    "text_dim":     "#93aa9c",
+    "accent":       "#16a34a",
+    "accent2":      "#0d9488",
     "white":        "#ffffff",
-    "success":      "#1fcc7a",
-    "danger":       "#f04060",
-    "warn":         "#f4a124",
-    "ecg_bg":       "#fff8f0",
-    "ecg_grid_maj": "rgba(210,50,50,0.30)",
-    "ecg_grid_min": "rgba(210,50,50,0.10)",
-    "ecg_normal":   "#1a5fa8",
-    "ecg_afib":     "#d03030",
+    "success":      "#15803d",
+    "danger":       "#dc2626",
+    "warn":         "#d97706",
+    "ecg_bg":       "#fffdf8",
+    "ecg_grid_maj": "rgba(210,50,50,0.22)",
+    "ecg_grid_min": "rgba(210,50,50,0.08)",
+    "ecg_normal":   "#0d9488",
+    "ecg_afib":     "#dc2626",
 }
 
 # ═══════════════════════════════════════════════════════════════════════════
 # CSS
 # ═══════════════════════════════════════════════════════════════════════════
-CSS = """
+CSS = f"""
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&family=Sora:wght@600;700&display=swap');
-  * { box-sizing: border-box; }
-  .stApp { background: #050b12; font-family: 'Inter', sans-serif; color: #c8dde8; }
-  .main .block-container { padding: 1.5rem 2rem !important; max-width: 100% !important; }
+  * {{ box-sizing: border-box; }}
+  .stApp {{ background: {COLORS["bg"]}; font-family: 'Inter', sans-serif; color: {COLORS["text"]}; }}
+  .main .block-container {{ padding: 1.5rem 2rem !important; max-width: 100% !important; }}
 
-  [data-testid="stSidebar"] { background: #080f18 !important; border-right: 1px solid #1a2d3d !important; }
-  [data-testid="stSidebar"] * { color: #c8dde8 !important; }
-  [data-testid="stSidebar"] hr { border-color: #1a2d3d !important; }
-  [data-testid="stSidebar"] .stRadio label span { font-size: 0.83rem !important; color: #7a9bb8 !important; }
-  [data-testid="stSidebar"] .stSelectbox label { font-size: 0.75rem !important; color: #3a5a78 !important; text-transform: uppercase !important; letter-spacing: 0.08em !important; }
-  [data-testid="stSidebar"] [data-baseweb="select"] { background: #0c1620 !important; border-color: #1a2d3d !important; }
-  [data-testid="stSidebar"] [data-baseweb="select"] * { background: #0c1620 !important; color: #c8dde8 !important; }
+  [data-testid="stSidebar"] {{ background: {COLORS["panel"]} !important; border-right: 1px solid {COLORS["border"]} !important; }}
+  [data-testid="stSidebar"] * {{ color: {COLORS["text"]} !important; }}
+  [data-testid="stSidebar"] hr {{ border-color: {COLORS["border"]} !important; }}
+  [data-testid="stSidebar"] .stRadio label span {{ font-size: 0.83rem !important; color: {COLORS["text_mid"]} !important; }}
+  [data-testid="stSidebar"] .stSelectbox label {{ font-size: 0.75rem !important; color: {COLORS["text_dim"]} !important; text-transform: uppercase !important; letter-spacing: 0.08em !important; }}
+  [data-testid="stSidebar"] [data-baseweb="select"] {{ background: {COLORS["panel2"]} !important; border-color: {COLORS["border"]} !important; }}
+  [data-testid="stSidebar"] [data-baseweb="select"] * {{ background: {COLORS["panel2"]} !important; color: {COLORS["text"]} !important; }}
 
-  .stTabs [data-baseweb="tab-list"] { background: #080f18; border-bottom: 1px solid #1a2d3d; padding: 0 1.5rem; gap: 0; }
-  .stTabs [data-baseweb="tab"] { color: #7a9bb8 !important; font-family: 'Inter', sans-serif !important; font-size: 0.78rem !important; font-weight: 500 !important; letter-spacing: 0.07em !important; text-transform: uppercase !important; padding: 0.9rem 1.4rem !important; border-bottom: 2px solid transparent !important; margin-bottom: -1px !important; background: transparent !important; }
-  .stTabs [aria-selected="true"] { color: #2ab5b5 !important; border-bottom: 2px solid #2ab5b5 !important; }
-  .stTabs [data-baseweb="tab-panel"] { padding: 1.5rem 2rem !important; background: #050b12; }
+  .stTabs [data-baseweb="tab-list"] {{ background: {COLORS["panel"]}; border-bottom: 1px solid {COLORS["border"]}; padding: 0 1.5rem; gap: 0; }}
+  .stTabs [data-baseweb="tab"] {{ color: {COLORS["text_mid"]} !important; font-family: 'Inter', sans-serif !important; font-size: 0.78rem !important; font-weight: 500 !important; letter-spacing: 0.07em !important; text-transform: uppercase !important; padding: 0.9rem 1.4rem !important; border-bottom: 2px solid transparent !important; margin-bottom: -1px !important; background: transparent !important; }}
+  .stTabs [aria-selected="true"] {{ color: {COLORS["accent"]} !important; border-bottom: 2px solid {COLORS["accent"]} !important; }}
+  .stTabs [data-baseweb="tab-panel"] {{ padding: 1.5rem 2rem !important; background: {COLORS["bg"]}; }}
 
-  [data-testid="metric-container"] { background: #080f18; border: 1px solid #1a2d3d; border-radius: 10px; padding: 1rem !important; }
-  [data-testid="stMetricValue"] { font-family: 'JetBrains Mono', monospace !important; font-size: 1.55rem !important; color: #ffffff !important; font-weight: 500 !important; }
-  [data-testid="stMetricLabel"] { font-size: 0.65rem !important; font-weight: 600 !important; letter-spacing: 0.1em !important; text-transform: uppercase !important; color: #3a5a78 !important; }
+  [data-testid="metric-container"] {{ background: {COLORS["panel"]}; border: 1px solid {COLORS["border"]}; border-radius: 10px; padding: 1rem !important; }}
+  [data-testid="stMetricValue"] {{ font-family: 'JetBrains Mono', monospace !important; font-size: 1.55rem !important; color: {COLORS["text"]} !important; font-weight: 500 !important; }}
+  [data-testid="stMetricLabel"] {{ font-size: 0.65rem !important; font-weight: 600 !important; letter-spacing: 0.1em !important; text-transform: uppercase !important; color: {COLORS["text_dim"]} !important; }}
 
-  .cs-alert { border-radius: 10px; padding: 1rem 1.3rem; margin: 0.6rem 0; display: flex; align-items: flex-start; gap: 0.8rem; }
-  .cs-alert-afib     { background: rgba(240,64,96,0.1);  border: 1px solid rgba(240,64,96,0.4);  border-left: 4px solid #f04060; }
-  .cs-alert-normal   { background: rgba(31,204,122,0.08); border: 1px solid rgba(31,204,122,0.3); border-left: 4px solid #1fcc7a; }
-  .cs-alert-borderline { background: rgba(244,161,36,0.08); border: 1px solid rgba(244,161,36,0.3); border-left: 4px solid #f4a124; }
+  .cs-alert {{ border-radius: 10px; padding: 1rem 1.3rem; margin: 0.6rem 0; display: flex; align-items: flex-start; gap: 0.8rem; }}
+  .cs-alert-afib     {{ background: rgba(220,38,38,0.07);  border: 1px solid rgba(220,38,38,0.3);  border-left: 4px solid {COLORS["danger"]}; }}
+  .cs-alert-normal   {{ background: rgba(21,128,61,0.07); border: 1px solid rgba(21,128,61,0.25); border-left: 4px solid {COLORS["success"]}; }}
+  .cs-alert-borderline {{ background: rgba(217,119,6,0.07); border: 1px solid rgba(217,119,6,0.25); border-left: 4px solid {COLORS["warn"]}; }}
 
-  .cs-label { font-size: 0.62rem; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: #3a5a78; margin-bottom: 0.5rem; padding-bottom: 0.3rem; border-bottom: 1px solid #1a2d3d; }
-  .cs-card  { background: #080f18; border: 1px solid #1a2d3d; border-radius: 12px; padding: 1.4rem; margin-bottom: 0.8rem; }
-  .cs-badge { display: inline-flex; align-items: center; gap: 5px; background: #0c1620; border: 1px solid #1a2d3d; border-radius: 16px; padding: 3px 10px; font-size: 0.72rem; font-family: 'JetBrains Mono', monospace; color: #7a9bb8; margin: 2px 0; }
-  .cs-pred-row { display:flex; justify-content:space-between; font-family:'JetBrains Mono', monospace; font-size:0.85rem; padding:4px 0; }
+  .cs-label {{ font-size: 0.62rem; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: {COLORS["text_dim"]}; margin-bottom: 0.5rem; padding-bottom: 0.3rem; border-bottom: 1px solid {COLORS["border"]}; }}
+  .cs-card  {{ background: {COLORS["panel"]}; border: 1px solid {COLORS["border"]}; border-radius: 12px; padding: 1.4rem; margin-bottom: 0.8rem; }}
+  .cs-badge {{ display: inline-flex; align-items: center; gap: 5px; background: {COLORS["panel2"]}; border: 1px solid {COLORS["border"]}; border-radius: 16px; padding: 3px 10px; font-size: 0.72rem; font-family: 'JetBrains Mono', monospace; color: {COLORS["text_mid"]}; margin: 2px 0; }}
+  .cs-pred-row {{ display:flex; justify-content:space-between; font-family:'JetBrains Mono', monospace; font-size:0.85rem; padding:4px 0; }}
 
-  .stButton>button { background: linear-gradient(135deg, #1e6fa8, #2ab5b5) !important; color: white !important; border: none !important; border-radius: 8px !important; font-family: 'Inter', sans-serif !important; font-weight: 600 !important; padding: 0.5rem 1.4rem !important; }
-  .stButton>button:hover { opacity: 0.9; }
-  .stDownloadButton > button { background: linear-gradient(135deg, #1e6fa8, #2ab5b5) !important; color: white !important; border: none !important; border-radius: 8px !important; font-family: 'Inter', sans-serif !important; font-weight: 600 !important; font-size: 0.8rem !important; }
-  [data-testid="stFileUploader"] { background: #080f18; border: 1.5px dashed #243d55; border-radius: 10px; }
-  .stDataFrame { border: 1px solid #1a2d3d !important; border-radius: 8px !important; overflow: hidden; }
-  .streamlit-expanderHeader { background: #080f18 !important; border: 1px solid #1a2d3d !important; border-radius: 8px !important; color: #c8dde8 !important; font-family: 'Inter', sans-serif !important; font-size: 0.82rem !important; }
-  .streamlit-expanderContent { background: #080f18 !important; border: 1px solid #1a2d3d !important; border-top: none !important; border-radius: 0 0 8px 8px !important; }
-  ::-webkit-scrollbar { width: 5px; height: 5px; }
-  ::-webkit-scrollbar-track { background: #050b12; }
-  ::-webkit-scrollbar-thumb { background: #243d55; border-radius: 3px; }
-  code { background: #0c1620 !important; color: #2ab5b5 !important; border: 1px solid #1a2d3d !important; border-radius: 4px !important; padding: 1px 5px !important; }
-  pre  { background: #0c1620 !important; border: 1px solid #1a2d3d !important; border-radius: 8px !important; }
+  .stButton>button {{ background: linear-gradient(135deg, {COLORS["accent2"]}, {COLORS["accent"]}) !important; color: white !important; border: none !important; border-radius: 8px !important; font-family: 'Inter', sans-serif !important; font-weight: 600 !important; padding: 0.5rem 1.4rem !important; }}
+  .stButton>button:hover {{ opacity: 0.9; }}
+  .stDownloadButton > button {{ background: linear-gradient(135deg, {COLORS["accent2"]}, {COLORS["accent"]}) !important; color: white !important; border: none !important; border-radius: 8px !important; font-family: 'Inter', sans-serif !important; font-weight: 600 !important; font-size: 0.8rem !important; }}
+  [data-testid="stFileUploader"] {{ background: {COLORS["panel2"]}; border: 1.5px dashed {COLORS["border_light"]}; border-radius: 10px; }}
+  .stDataFrame {{ border: 1px solid {COLORS["border"]} !important; border-radius: 8px !important; overflow: hidden; }}
+  .streamlit-expanderHeader {{ background: {COLORS["panel"]} !important; border: 1px solid {COLORS["border"]} !important; border-radius: 8px !important; color: {COLORS["text"]} !important; font-family: 'Inter', sans-serif !important; font-size: 0.82rem !important; }}
+  .streamlit-expanderContent {{ background: {COLORS["panel"]} !important; border: 1px solid {COLORS["border"]} !important; border-top: none !important; border-radius: 0 0 8px 8px !important; }}
+  ::-webkit-scrollbar {{ width: 5px; height: 5px; }}
+  ::-webkit-scrollbar-track {{ background: {COLORS["bg"]}; }}
+  ::-webkit-scrollbar-thumb {{ background: {COLORS["border_light"]}; border-radius: 3px; }}
+  code {{ background: {COLORS["panel2"]} !important; color: {COLORS["accent2"]} !important; border: 1px solid {COLORS["border"]} !important; border-radius: 4px !important; padding: 1px 5px !important; }}
+  pre  {{ background: {COLORS["panel2"]} !important; border: 1px solid {COLORS["border"]} !important; border-radius: 8px !important; }}
 </style>
 """
 st.markdown(CSS, unsafe_allow_html=True)
