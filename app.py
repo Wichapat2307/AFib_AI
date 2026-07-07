@@ -43,6 +43,12 @@ try:
 except ImportError:
     CATBOOST_AVAILABLE = False
 
+try:
+    import sklearn
+    SKLEARN_AVAILABLE = True
+except ImportError:
+    SKLEARN_AVAILABLE = False
+
 # ═══════════════════════════════════════════════════════════════════════════
 # PAGE CONFIG
 # ═══════════════════════════════════════════════════════════════════════════
@@ -640,9 +646,9 @@ def main():
         # Model availability badges
         st.markdown(f'<div class="cs-label">Library Status</div>', unsafe_allow_html=True)
         for name, ok in [
+            ("Random Forest", SKLEARN_AVAILABLE),
             ("XGBoost",       XGB_AVAILABLE),
             ("CatBoost",      CATBOOST_AVAILABLE),
-            ("RandomForest",  RANDOMFOREST_AVAILABLE)
             ]:
             dot = "🟢" if ok else "🔴"
             st.markdown(f'<div class="cs-badge">{dot} {name}</div>', unsafe_allow_html=True)
