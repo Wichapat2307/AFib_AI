@@ -54,7 +54,7 @@ except ImportError:
 # PAGE CONFIG
 # ═══════════════════════════════════════════════════════════════════════════
 st.set_page_config(
-    page_title="AFib AI",
+    page_title="CardioSense",
     page_icon="🫀",
     layout="wide",
     initial_sidebar_state="expanded",
@@ -284,6 +284,10 @@ def load_xgb_model(path: str):
     return _load_pkl(path)
 
 @st.cache_resource
+def load_rf_model(path: str):
+    return _load_pkl(path)
+
+@st.cache_resource
 def load_catboost_model(path: str):
     if not CATBOOST_AVAILABLE:
         return None
@@ -324,6 +328,28 @@ def predict_xgb(model, features):
         x = imputer.transform(x)
     prob = float(clf.predict_proba(x)[0][1])
     return ("AFib" if prob >= threshold else "Normal"), prob
+
+def predict_rf(model, features):
+
+    if isinstance(model, dict):
+        clf = model["model"]
+        imputer = model.get("imputer")
+        threshold = float(model.get("threshold", 0.5))
+    else:
+        clf, imputer, threshold = model, None, 0.5
+
+    x = features.reshape(1, -1)
+
+    if imputer is not None:
+        x = imputer.transform(x)
+
+    prob = float(clf.predict_proba(x)[0][1])
+
+    return (
+        "AFib" if prob >= threshold else "Normal",
+        prob,
+        threshold
+    )
 
 def predict_catboost(model, features):
     if isinstance(model, dict):
@@ -381,7 +407,7 @@ def make_synthetic_ecg(afib=False, seed=42, fs=FS, duration_s=30):
     return bandpass_filter(ecg, fs).astype(np.float32)
 
 # ═══════════════════════════════════════════════════════════════════════════
-# PLOTS  — all use AFib AI palette
+# PLOTS  — all use CardioSense palette
 # ═══════════════════════════════════════════════════════════════════════════
 
 def _base_layout(**kwargs):
@@ -612,7 +638,7 @@ def main():
         <div style='padding:1rem 0 0.8rem;'>
           <div style='font-size:1.8rem; margin-bottom:6px;'>🫀</div>
           <div style='font-family:"Sora",sans-serif; font-size:1.3rem; color:white;
-                      font-weight:700; line-height:1;'>AFib AI</div>
+                      font-weight:700; line-height:1;'>CardioSense</div>
           <div style='font-family:"JetBrains Mono",monospace; font-size:0.55rem;
                       color:{COLORS["text_dim"]}; letter-spacing:0.12em; margin-top:4px;'>
             HRV ANALYSIS v1.0
@@ -650,7 +676,7 @@ def main():
         st.divider()
         st.markdown(f'<div class="cs-label">Model Selection</div>', unsafe_allow_html=True)
 
-        MODEL_OPTIONS = []
+        MODEL_OPTIONS = ["Random Forest", "XGBoost", "CatBoost", "Ensemble"]
         if XGB_AVAILABLE:
             MODEL_OPTIONS.append("XGBoost")
         else:
@@ -672,13 +698,79 @@ def main():
         )
 
         weights_path = ""
-        if model_choice == "XGBoost":
-            weights_path = st.text_input("XGBoost model path (.pkl)", value="models/xgb.pkl")
+        if model_choice == "Random Forest":
+
+            mdl = load_rf_model(weights_path)
+
+            if mdl is None:
+                st.warning(f"RF not found at {weights_path}")
+                label, prob, threshold, reasons = hrv_heuristic(features)
+            else:
+                label, prob, threshold = predict_rf(mdl, features)
+
+        elif model_choice == "XGBoost":
+            mdl = load_xgb_model(weights_path)
+
+            if mdl is None:
+                st.warning(f"XGBoost not found at {weights_path}")
+                label, prob, threshold, reasons = hrv_heuristic(features)
+            else:
+                label, prob, threshold = predict_xgb(mdl, features)
+
         elif model_choice == "CatBoost":
-            weights_path = st.text_input("CatBoost model path (.pkl)", value="models/catboost.pkl")
-        elif model_choice in ("CNN","CNN+LSTM"):
-            weights_path = st.text_input("PyTorch weights path (.pth)",
-                                         value=f"models/{model_choice.lower()}_best.pth")
+
+            mdl = load_catboost_model(weights_path)
+
+            if mdl is None:
+                st.warning(f"CatBoost not found at {weights_path}")
+                label, prob, threshold, reasons = hrv_heuristic(features)
+            else:
+                label, prob, threshold = predict_catboost(mdl, features)
+
+        elif model_choice == "Ensemble":
+
+            rf_model  = load_rf_model("models/rf.pkl")
+            xgb_model = load_xgb_model("models/xgb.pkl")
+            cat_model = load_catboost_model("models/catboost.pkl")
+
+            probs = []
+
+            if rf_model is not None:
+                _, p, _ = predict_rf(rf_model, features)
+                probs.append(p)
+
+            if xgb_model is not None:
+                _, p, _ = predict_xgb(xgb_model, features)
+                probs.append(p)
+
+            if cat_model is not None:
+                _, p, _ = predict_catboost(cat_model, features)
+                probs.append(p)
+
+            if len(probs) == 0:
+                label, prob, threshold, reasons = hrv_heuristic(features)
+
+            else:
+                prob = float(np.mean(probs))
+                threshold = 0.5
+                label = "AFib" if prob >= threshold else "Normal"
+            
+            if model_choice == "Ensemble":
+
+                st.markdown("### Individual Model Predictions")
+
+                if rf_model is not None:
+                    _, p, _ = predict_rf(rf_model, features)
+                    st.write(f"RF: {p*100:.1f}%")
+
+                if xgb_model is not None:
+                    _, p, _ = predict_xgb(xgb_model, features)
+                    st.write(f"XGBoost: {p*100:.1f}%")
+
+                if cat_model is not None:
+                    _, p, _ = predict_catboost(cat_model, features)
+                    st.write(f"CatBoost: {p*100:.1f}%")
+        
 
         st.divider()
         # Model availability badges
@@ -705,11 +797,11 @@ def main():
         <span style='font-size:1.6rem;'>🫀</span>
         <div>
           <span style='font-family:"Sora",sans-serif; font-size:1.25rem; color:white; font-weight:700;'>
-            AFib AI
+            CardioSense 
           </span>
         </div>
       </div>
-    </div>s
+    </div>
     """, unsafe_allow_html=True)
 
     # ── SIGNAL LOADING ───────────────────────────────────────────────────
@@ -770,7 +862,7 @@ def main():
         else:
             extra_html = ""
 
-        # Display using the custom AFib AI card aesthetic. 
+        # Display using the custom CardioSense card aesthetic. 
         # ZERO indentation here prevents Streamlit from turning it into a code block!
         st.markdown(f"""
 <div class="cs-card" style="display: flex; gap: 3rem; align-items: center; padding: 1rem 1.5rem; flex-wrap: wrap;">
