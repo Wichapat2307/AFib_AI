@@ -137,12 +137,10 @@ st.markdown(CSS, unsafe_allow_html=True)
 FS     = 128
 WINDOW = 3840   # 30 s × 128 Hz
 
-APP_DIR = Path(__file__).parent.resolve()
-
 MODEL_PATHS = {
-    "Random Forest": str(APP_DIR / "models" / "rf.pkl"),
-    "XGBoost":        str(APP_DIR / "models" / "xgb.pkl"),
-    "CatBoost":        str(APP_DIR / "models" / "catboost.pkl"),
+    "Random Forest": "models/rf.pkl",
+    "XGBoost":        "models/xgb.pkl",
+    "CatBoost":        "models/catboost.pkl",
 }
 
 FEATURE_NAMES = [
