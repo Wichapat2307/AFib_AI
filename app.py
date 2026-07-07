@@ -327,29 +327,7 @@ def predict_xgb(model, features):
     if imputer is not None:
         x = imputer.transform(x)
     prob = float(clf.predict_proba(x)[0][1])
-    return ("AFib" if prob >= threshold else "Normal"), prob
-
-def predict_rf(model, features):
-
-    if isinstance(model, dict):
-        clf = model["model"]
-        imputer = model.get("imputer")
-        threshold = float(model.get("threshold", 0.5))
-    else:
-        clf, imputer, threshold = model, None, 0.5
-
-    x = features.reshape(1, -1)
-
-    if imputer is not None:
-        x = imputer.transform(x)
-
-    prob = float(clf.predict_proba(x)[0][1])
-
-    return (
-        "AFib" if prob >= threshold else "Normal",
-        prob,
-        threshold
-    )
+    return ("AFib" if prob >= threshold else "Normal"), prob, threshold
 
 def predict_catboost(model, features):
     if isinstance(model, dict):
@@ -675,8 +653,7 @@ def main():
 
         st.divider()
         st.markdown(f'<div class="cs-label">Model Selection</div>', unsafe_allow_html=True)
-
-        MODEL_OPTIONS = ["Random Forest", "XGBoost", "CatBoost", "Ensemble"]
+        MODEL_OPTIONS = []
         if XGB_AVAILABLE:
             MODEL_OPTIONS.append("XGBoost")
         else:
@@ -698,79 +675,12 @@ def main():
         )
 
         weights_path = ""
-        if model_choice == "Random Forest":
-
-            mdl = load_rf_model(weights_path)
-
-            if mdl is None:
-                st.warning(f"RF not found at {weights_path}")
-                label, prob, threshold, reasons = hrv_heuristic(features)
-            else:
-                label, prob, threshold = predict_rf(mdl, features)
-
-        elif model_choice == "XGBoost":
-            mdl = load_xgb_model(weights_path)
-
-            if mdl is None:
-                st.warning(f"XGBoost not found at {weights_path}")
-                label, prob, threshold, reasons = hrv_heuristic(features)
-            else:
-                label, prob, threshold = predict_xgb(mdl, features)
-
+        if model_choice == "XGBoost":
+            weights_path = st.text_input("XGBoost model path (.pkl)",
+                                         value="models/xgb.pkl")
         elif model_choice == "CatBoost":
-
-            mdl = load_catboost_model(weights_path)
-
-            if mdl is None:
-                st.warning(f"CatBoost not found at {weights_path}")
-                label, prob, threshold, reasons = hrv_heuristic(features)
-            else:
-                label, prob, threshold = predict_catboost(mdl, features)
-
-        elif model_choice == "Ensemble":
-
-            rf_model  = load_rf_model("models/rf.pkl")
-            xgb_model = load_xgb_model("models/xgb.pkl")
-            cat_model = load_catboost_model("models/catboost.pkl")
-
-            probs = []
-
-            if rf_model is not None:
-                _, p, _ = predict_rf(rf_model, features)
-                probs.append(p)
-
-            if xgb_model is not None:
-                _, p, _ = predict_xgb(xgb_model, features)
-                probs.append(p)
-
-            if cat_model is not None:
-                _, p, _ = predict_catboost(cat_model, features)
-                probs.append(p)
-
-            if len(probs) == 0:
-                label, prob, threshold, reasons = hrv_heuristic(features)
-
-            else:
-                prob = float(np.mean(probs))
-                threshold = 0.5
-                label = "AFib" if prob >= threshold else "Normal"
-            
-            if model_choice == "Ensemble":
-
-                st.markdown("### Individual Model Predictions")
-
-                if rf_model is not None:
-                    _, p, _ = predict_rf(rf_model, features)
-                    st.write(f"RF: {p*100:.1f}%")
-
-                if xgb_model is not None:
-                    _, p, _ = predict_xgb(xgb_model, features)
-                    st.write(f"XGBoost: {p*100:.1f}%")
-
-                if cat_model is not None:
-                    _, p, _ = predict_catboost(cat_model, features)
-                    st.write(f"CatBoost: {p*100:.1f}%")
-        
+            weights_path = st.text_input("CatBoost model path (.pkl)",
+                                         value="models/catboost.pkl")
 
         st.divider()
         # Model availability badges
