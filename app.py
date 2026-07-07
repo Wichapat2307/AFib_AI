@@ -118,6 +118,7 @@ CSS = f"""
     fill: {COLORS["text"]} !important;
   }}
   [data-testid="stSidebar"] [data-baseweb="select"] svg {{ fill: {COLORS["text_mid"]} !important; }}
+  [data-testid="stSidebar"] [data-baseweb="select"] div:has(> svg) {{ background: transparent !important; background-color: transparent !important; }}
   div[data-baseweb="popover"],
   div[data-baseweb="popover"] div {{ background: {COLORS["panel2"]} !important; background-color: {COLORS["panel2"]} !important; color-scheme: light !important; }}
   div[data-baseweb="popover"] [data-baseweb="menu"] {{ background: {COLORS["panel2"]} !important; border: 1px solid {COLORS["border"]} !important; }}
