@@ -101,6 +101,11 @@ CSS = f"""
   [data-testid="stSidebar"] .stSelectbox label {{ font-size: 0.75rem !important; color: {COLORS["text_dim"]} !important; text-transform: uppercase !important; letter-spacing: 0.08em !important; }}
   [data-testid="stSidebar"] [data-baseweb="select"] {{ background: {COLORS["panel2"]} !important; border-color: {COLORS["border"]} !important; }}
   [data-testid="stSidebar"] [data-baseweb="select"] * {{ background: {COLORS["panel2"]} !important; color: {COLORS["text"]} !important; }}
+  [data-testid="stSidebar"] .stNumberInput label {{ font-size: 0.75rem !important; color: {COLORS["text_dim"]} !important; text-transform: uppercase !important; letter-spacing: 0.08em !important; }}
+  [data-testid="stSidebar"] .stNumberInput > div > div {{ background: {COLORS["panel2"]} !important; border: 1px solid {COLORS["border"]} !important; border-radius: 8px !important; }}
+  [data-testid="stSidebar"] .stNumberInput input {{ background: {COLORS["panel2"]} !important; color: {COLORS["text"]} !important; -webkit-text-fill-color: {COLORS["text"]} !important; }}
+  [data-testid="stSidebar"] .stNumberInput button {{ background: {COLORS["panel2"]} !important; border-color: {COLORS["border"]} !important; }}
+  [data-testid="stSidebar"] .stNumberInput button svg {{ fill: {COLORS["text"]} !important; }}
 
   .stTabs [data-baseweb="tab-list"] {{ background: {COLORS["panel"]}; border-bottom: 1px solid {COLORS["border"]}; padding: 0 1.5rem; gap: 0; }}
   .stTabs [data-baseweb="tab"] {{ color: {COLORS["text_mid"]} !important; font-family: 'Inter', sans-serif !important; font-size: 0.78rem !important; font-weight: 500 !important; letter-spacing: 0.07em !important; text-transform: uppercase !important; padding: 0.9rem 1.4rem !important; border-bottom: 2px solid transparent !important; margin-bottom: -1px !important; background: transparent !important; }}
