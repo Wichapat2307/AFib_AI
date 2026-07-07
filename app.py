@@ -709,7 +709,7 @@ def main():
           </span>
         </div>
       </div>
-    </div>s
+    </div>
     """, unsafe_allow_html=True)
 
     # ── SIGNAL LOADING ───────────────────────────────────────────────────
