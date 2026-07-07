@@ -1,0 +1,14 @@
+streamlit
+numpy
+pandas
+plotly
+scipy
+scikit-learn
+xgboost
+catboost
+joblib
+torch
+torchvision
+gdown
+wfdb
+shap

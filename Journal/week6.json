@@ -1,0 +1,41 @@
+{
+  "week": 6,
+  "title": "Training Split — LTAFDB Segmentation & 80/20 Split",
+  "status": "completed",
+  "summary": "Applied windowing and patient-level train/test split to the LTAFDB dataset. Record 00 excluded. MITBIH reserved for later cross-validation.",
+  "completed_tasks": [
+    "Excluded LTAFDB record 00 (corrupted/insufficient data)",
+    "Applied 30-second windows with 50% overlap across all 74 remaining LTAFDB records",
+    "Labeled each window as AFib or Normal based on dominant rhythm annotation within the window",
+    "Performed patient-level 80/20 train/test split on LTAFDB (no patient leakage between splits)",
+    "Documented class distribution (AFib vs Normal) across train and test sets",
+    "Ran bandpass filtering and resampled MITBIH signals from 250 Hz → 128 Hz for future use"
+  ],
+  "split_details": {
+    "dataset": "LTAFDB",
+    "excluded_records": ["00"],
+    "total_records": 74,
+    "split_type": "patient-level",
+    "train_ratio": 0.80,
+    "test_ratio": 0.20,
+    "window_size_seconds": 30,
+    "window_overlap": "50%"
+  },
+  "preprocessing_applied": [
+    "Bandpass filter (noise reduction)",
+    "Resampling to 128 Hz",
+    "Signal normalization",
+    "Window segmentation"
+  ],
+  "next_week_plan": {
+    "week": 7,
+    "focus": "Evaluation — use full MITBIH dataset for cross-validation",
+    "goals": [
+      "Use the full 22-record MITBIH AFDB dataset as an independent cross-validation set",
+      "Apply identical preprocessing pipeline (bandpass, resample to 128 Hz, normalize, 30s windows)",
+      "Train candidate models on LTAFDB train split and evaluate on MITBIH",
+      "Compare model performance: XGBoost, Random Forest, CNN, LSTM, CNN+LSTM hybrid",
+      "Compute metrics: accuracy, precision, recall, F1, AUC-ROC"
+    ]
+  }
+}
