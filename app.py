@@ -642,7 +642,7 @@ def main():
         for name, ok in [
             ("XGBoost",       XGB_AVAILABLE),
             ("CatBoost",      CATBOOST_AVAILABLE),
-            ("RandomForest",  RANDOMFOREST_WVAILABLE)
+            ("RandomForest",  RANDOMFOREST_AVAILABLE)
             ]:
             dot = "🟢" if ok else "🔴"
             st.markdown(f'<div class="cs-badge">{dot} {name}</div>', unsafe_allow_html=True)
