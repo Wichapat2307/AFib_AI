@@ -137,10 +137,12 @@ st.markdown(CSS, unsafe_allow_html=True)
 FS     = 128
 WINDOW = 3840   # 30 s × 128 Hz
 
+APP_DIR = Path(__file__).parent.resolve()
+
 MODEL_PATHS = {
-    "Random Forest": "models/rf.pkl",
-    "XGBoost":        "models/xgb.pkl",
-    "CatBoost":        "models/catboost.pkl",
+    "Random Forest": str(APP_DIR / "models" / "rf.pkl"),
+    "XGBoost":        str(APP_DIR / "models" / "xgb.pkl"),
+    "CatBoost":        str(APP_DIR / "models" / "catboost.pkl"),
 }
 
 FEATURE_NAMES = [
@@ -624,6 +626,15 @@ def main():
         show_individual = True
         if model_choice == "Ensemble":
             show_individual = st.checkbox("Show individual model predictions", value=True)
+
+        st.divider()
+        with st.expander("🛠️ Model path debug", expanded=False):
+            st.caption(f"app.py location: `{APP_DIR}`")
+            for name, path in MODEL_PATHS.items():
+                exists = Path(path).exists()
+                dot = "🟢" if exists else "🔴"
+                st.markdown(f"{dot} **{name}**")
+                st.code(path, language=None)
 
         st.divider()
         # Model availability badges
