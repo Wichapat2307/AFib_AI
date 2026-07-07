@@ -5,15 +5,14 @@ Streamlit app for detecting Atrial Fibrillation from ECG signals.
 Restyled to match CardioSense aesthetic.
 
 Models supported:
+  - Random Forest (HRV features — loads models/rf.pkl)
   - XGBoost  (HRV features — loads models/xgb.pkl)
   - CatBoost (HRV features — loads models/catboost.pkl)
-  - CNN / CNN+LSTM  (raw signal — loads models/*.pth)
-  - HRV heuristic (no trained model required — always available)
+  - Ensemble (mean of all available model probabilities)
+  - HRV heuristic (no trained model required — always available, used as fallback)
 
 Run: streamlit run app.py
 """
-
-from cProfile import label
 
 import streamlit as st
 import numpy as np
@@ -31,12 +30,6 @@ except ImportError:
 from scipy.signal import find_peaks, butter, filtfilt, welch
 from scipy.stats import skew, kurtosis
 from scipy.interpolate import interp1d
-
-try:
-    import torch
-    TORCH_AVAILABLE = True
-except ImportError:
-    TORCH_AVAILABLE = False
 
 try:
     import xgboost as xgb
@@ -61,7 +54,7 @@ st.set_page_config(
 )
 
 # ═══════════════════════════════════════════════════════════════════════════
-# COLOR PALETTE  
+# COLOR PALETTE
 # ═══════════════════════════════════════════════════════════════════════════
 COLORS = {
     "bg":           "#050b12",
@@ -86,7 +79,7 @@ COLORS = {
 }
 
 # ═══════════════════════════════════════════════════════════════════════════
-# CSS 
+# CSS
 # ═══════════════════════════════════════════════════════════════════════════
 CSS = """
 <style>
@@ -120,6 +113,7 @@ CSS = """
   .cs-label { font-size: 0.62rem; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: #3a5a78; margin-bottom: 0.5rem; padding-bottom: 0.3rem; border-bottom: 1px solid #1a2d3d; }
   .cs-card  { background: #080f18; border: 1px solid #1a2d3d; border-radius: 12px; padding: 1.4rem; margin-bottom: 0.8rem; }
   .cs-badge { display: inline-flex; align-items: center; gap: 5px; background: #0c1620; border: 1px solid #1a2d3d; border-radius: 16px; padding: 3px 10px; font-size: 0.72rem; font-family: 'JetBrains Mono', monospace; color: #7a9bb8; margin: 2px 0; }
+  .cs-pred-row { display:flex; justify-content:space-between; font-family:'JetBrains Mono', monospace; font-size:0.85rem; padding:4px 0; }
 
   .stButton>button { background: linear-gradient(135deg, #1e6fa8, #2ab5b5) !important; color: white !important; border: none !important; border-radius: 8px !important; font-family: 'Inter', sans-serif !important; font-weight: 600 !important; padding: 0.5rem 1.4rem !important; }
   .stButton>button:hover { opacity: 0.9; }
@@ -142,6 +136,12 @@ st.markdown(CSS, unsafe_allow_html=True)
 # ═══════════════════════════════════════════════════════════════════════════
 FS     = 128
 WINDOW = 3840   # 30 s × 128 Hz
+
+MODEL_PATHS = {
+    "Random Forest": "models/rf.pkl",
+    "XGBoost":        "models/xgb.pkl",
+    "CatBoost":        "models/catboost.pkl",
+}
 
 FEATURE_NAMES = [
     "mean_rr","median_rr","sdnn","rmssd","pnn50","cv_rr",
@@ -293,36 +293,27 @@ def load_catboost_model(path: str):
         return None
     return _load_pkl(path)
 
-@st.cache_resource
-def load_deep_model(model_name: str, weights_path: str):
-    if not TORCH_AVAILABLE:
-        return None
-    p = Path(weights_path)
-    if not p.exists():
-        return None
-    try:
-        import sys; sys.path.insert(0, str(Path(__file__).parent))
-        from model import AFibCNN, AFibCNNLSTM
-        cls_map = {"CNN":AFibCNN, "CNN+LSTM":AFibCNNLSTM}
-        m = cls_map[model_name]()
-        m.load_state_dict(torch.load(weights_path, map_location="cpu"))
-        m.eval()
-        return m
-    except Exception as e:
-        st.warning(f"Deep model load failed: {e}")
-        return None
-
 # ═══════════════════════════════════════════════════════════════════════════
 # INFERENCE
 # ═══════════════════════════════════════════════════════════════════════════
 
-def predict_xgb(model, features):
+def _unpack_model(model):
+    """Return (clf, imputer, threshold) whether model is a bare classifier
+    or a dict bundle like {"model":..., "imputer":..., "threshold":...}."""
     if isinstance(model, dict):
-        clf       = model["model"]
-        imputer   = model.get("imputer")
-        threshold = float(model.get("threshold", 0.5))
-    else:
-        clf, imputer, threshold = model, None, 0.5
+        return model["model"], model.get("imputer"), float(model.get("threshold", 0.5))
+    return model, None, 0.5
+
+def predict_rf(model, features):
+    clf, imputer, threshold = _unpack_model(model)
+    x = features.reshape(1, -1)
+    if imputer is not None:
+        x = imputer.transform(x)
+    prob = float(clf.predict_proba(x)[0][1])
+    return ("AFib" if prob >= threshold else "Normal"), prob, threshold
+
+def predict_xgb(model, features):
+    clf, imputer, threshold = _unpack_model(model)
     x = features.reshape(1, -1)
     if imputer is not None:
         x = imputer.transform(x)
@@ -330,25 +321,12 @@ def predict_xgb(model, features):
     return ("AFib" if prob >= threshold else "Normal"), prob, threshold
 
 def predict_catboost(model, features):
-    if isinstance(model, dict):
-        clf       = model["model"]
-        imputer   = model.get("imputer")
-        threshold = float(model.get("threshold", 0.5))
-    else:
-        clf, imputer, threshold = model, None, 0.5
+    clf, imputer, threshold = _unpack_model(model)
     x = features.reshape(1, -1)
     if imputer is not None:
         x = imputer.transform(x)
     prob = float(clf.predict_proba(x)[0][1])
-    return ("AFib" if prob >= threshold else "Normal"), prob
-
-def predict_deep(model, signal):
-    sig = signal.copy().astype(np.float32)
-    sig = sig[:WINDOW] if len(sig) >= WINDOW else np.pad(sig, (0, WINDOW-len(sig)))
-    x = torch.tensor(sig).unsqueeze(0).unsqueeze(0)
-    with torch.no_grad():
-        probs = torch.softmax(model(x), dim=1).numpy()[0]
-    return ("AFib" if probs[1] >= 0.5 else "Normal"), float(probs[1])
+    return ("AFib" if prob >= threshold else "Normal"), prob, threshold
 
 def hrv_heuristic(features):
     feat = dict(zip(FEATURE_NAMES, features))
@@ -360,29 +338,8 @@ def hrv_heuristic(features):
     lfhf_i  = max(0.0,1.0-min(feat["lf_hf"]/2.0,1.0)); reasons["LF/HF imbalance"] = lfhf_i; score += lfhf_i*0.10
     cv_n    = min(feat["cv_rr"]/0.25, 1.0);       reasons["CV of RR"]            = cv_n;    score += cv_n*0.05
     prob = float(np.clip(score, 0.0, 1.0))
-    return ("AFib" if prob >= 0.45 else "Normal"), prob, reasons
-
-# ═══════════════════════════════════════════════════════════════════════════
-# SYNTHETIC DEMO
-# ═══════════════════════════════════════════════════════════════════════════
-
-def make_synthetic_ecg(afib=False, seed=42, fs=FS, duration_s=30):
-    rng = np.random.default_rng(seed)
-    n   = fs * duration_s
-    rr_intervals = (rng.exponential(60/90, 200) if afib
-                    else rng.normal(60/65, 0.02, 200))
-    rr_intervals = np.clip(rr_intervals, 0.25, 1.5)
-    beat_times   = np.cumsum(rr_intervals)
-    beat_times   = beat_times[beat_times < duration_s]
-    beat_samples = (beat_times * fs).astype(int)
-    ecg = rng.normal(0, 0.05, n)
-    for bs in beat_samples:
-        if bs + 30 < n:
-            ecg[bs:bs+5] += np.array([-0.1,0.3,1.5,0.3,-0.2])
-            ecg[bs+10:bs+30] += np.sin(np.linspace(0,np.pi,20))*0.3
-        if bs - 25 >= 0:
-            ecg[bs-25:bs-5] += np.sin(np.linspace(0,np.pi,20))*0.15
-    return bandpass_filter(ecg, fs).astype(np.float32)
+    threshold = 0.45
+    return ("AFib" if prob >= threshold else "Normal"), prob, threshold, reasons
 
 # ═══════════════════════════════════════════════════════════════════════════
 # PLOTS  — all use CardioSense palette
@@ -547,10 +504,11 @@ def plot_radar(features):
 
 def plot_feature_importance_xgb(model):
     try:
-        scores = model.get_booster().get_fscore()
+        clf, _, _ = _unpack_model(model)
+        scores = clf.get_booster().get_fscore()
         if not scores:
             scores = dict(zip([f"f{i}" for i in range(len(FEATURE_NAMES))],
-                              model.feature_importances_))
+                              clf.feature_importances_))
         named = {}
         for k, v in scores.items():
             try:
@@ -582,7 +540,8 @@ def plot_feature_importance_xgb(model):
 
 def plot_feature_importance_cb(model):
     try:
-        imps = model.get_feature_importance()
+        clf, _, _ = _unpack_model(model)
+        imps = clf.get_feature_importance()
         df = pd.DataFrame({"Feature": FEATURE_NAMES[:len(imps)], "Importance": imps})
         df = df.sort_values("Importance", ascending=True).tail(15)
         fig = go.Figure(go.Bar(
@@ -629,15 +588,13 @@ def main():
 
         st.divider()
         st.markdown(f'<div class="cs-label">Input Source</div>', unsafe_allow_html=True)
-        
-        # Updated Input Mode
+
         input_mode = st.radio(
             "Input Source",
             ["Demo ECG", "Upload .npy file", "Upload .csv file"],
             label_visibility="collapsed",
         )
 
-        # New Selectbox triggered when "Demo ECG" is selected
         if input_mode == "Demo ECG":
             demo_choice = st.selectbox(
                 "Demo ECG",
@@ -651,36 +608,22 @@ def main():
         window_index  = st.number_input("Window index (multi-window files)",
                                         min_value=0, value=0, step=1)
 
+        # ── MODEL SELECTION ─────────────────────────────────────────────
         st.divider()
         st.markdown(f'<div class="cs-label">Model Selection</div>', unsafe_allow_html=True)
-        MODEL_OPTIONS = []
-        if XGB_AVAILABLE:
-            MODEL_OPTIONS.append("XGBoost")
-        else:
-            st.markdown(f'<div class="cs-badge">🔴 xgboost not installed</div>', unsafe_allow_html=True)
-        #if CATBOOST_AVAILABLE:
-            MODEL_OPTIONS.append("CatBoost")
-        #else:
-            #st.markdown(f'<div class="cs-badge">🔴 catboost not installed</div>', unsafe_allow_html=True)
-        # Deep models kept for research only
-        # if TORCH_AVAILABLE:
-        # MODEL_OPTIONS += ["CNN","CNN+LSTM"]
 
-        default_idx = MODEL_OPTIONS.index("XGBoost") if "XGBoost" in MODEL_OPTIONS else 0
-
-        model_choice = st.selectbox(
+        MODEL_OPTIONS = ["Random Forest", "XGBoost", "CatBoost", "Ensemble ⭐"]
+        model_choice_raw = st.radio(
             "Model",
             MODEL_OPTIONS,
-            index=default_idx
+            index=3,  # Ensemble is the default / recommended option
+            label_visibility="collapsed",
         )
+        model_choice = model_choice_raw.replace(" ⭐", "")
 
-        weights_path = ""
-        if model_choice == "XGBoost":
-            weights_path = st.text_input("XGBoost model path (.pkl)",
-                                         value="models/xgb.pkl")
-        elif model_choice == "CatBoost":
-            weights_path = st.text_input("CatBoost model path (.pkl)",
-                                         value="models/catboost.pkl")
+        show_individual = True
+        if model_choice == "Ensemble":
+            show_individual = st.checkbox("Show individual model predictions", value=True)
 
         st.divider()
         # Model availability badges
@@ -707,7 +650,7 @@ def main():
         <span style='font-size:1.6rem;'>🫀</span>
         <div>
           <span style='font-family:"Sora",sans-serif; font-size:1.25rem; color:white; font-weight:700;'>
-            CardioSense 
+            CardioSense
           </span>
         </div>
       </div>
@@ -717,13 +660,13 @@ def main():
     # ── SIGNAL LOADING ───────────────────────────────────────────────────
     signal = None
     signal_label = "Unknown"
-    demo_meta = None  
+    demo_meta = None
 
     if input_mode == "Demo ECG":
         try:
             signal = np.load(DEMO_FILES[demo_choice]["path"])
             signal_label = demo_choice
-            demo_meta = DEMO_FILES[demo_choice]  
+            demo_meta = DEMO_FILES[demo_choice]
             if demo_choice == "Normal #3":
                 st.info(
                 "This sample is intentionally challenging. "
@@ -733,15 +676,15 @@ def main():
         except FileNotFoundError:
             st.error(f"⚠️ Demo file not found at `{DEMO_FILES[demo_choice]['path']}`.")
             st.stop()
-            
+
     elif input_mode == "Upload .npy file":
-        uploaded_file = st.file_uploader( "Upload .npy ECG File", type=["npy"] )
+        uploaded_file = st.file_uploader("Upload .npy ECG File", type=["npy"])
         if uploaded_file is not None:
             signal = np.load(uploaded_file)
             signal_label = uploaded_file.name
-            
+
     elif input_mode == "Upload .csv file":
-        uploaded_file = st.file_uploader("Upload .csv ECG File", type=["csv"])   
+        uploaded_file = st.file_uploader("Upload .csv ECG File", type=["csv"])
         if uploaded_file is not None:
             df = pd.read_csv(uploaded_file)
             signal = df.iloc[:, 0].values
@@ -752,13 +695,11 @@ def main():
         total_seconds = len(signal) / fs_input
         duration_str = f"{total_seconds:.1f}s"
 
-        # Generate extra HTML blocks if we have MIT-BIH metadata
         if demo_meta:
-            # Strip the 's', convert to math-able number, and calculate end time
             start_time = float(demo_meta['time'].replace("s", ""))
             end_time = start_time + total_seconds
             time_display = f"{start_time:.1f}s — {end_time:.1f}s"
-            
+
             extra_html = f"""
 <div>
 <div class="cs-label">Source Record</div>
@@ -772,8 +713,6 @@ def main():
         else:
             extra_html = ""
 
-        # Display using the custom CardioSense card aesthetic. 
-        # ZERO indentation here prevents Streamlit from turning it into a code block!
         st.markdown(f"""
 <div class="cs-card" style="display: flex; gap: 3rem; align-items: center; padding: 1rem 1.5rem; flex-wrap: wrap;">
 <div>
@@ -791,6 +730,7 @@ def main():
 </div>
 </div>
 """, unsafe_allow_html=True)
+
     # ── PREPROCESS + FEATURES ────────────────────────────────────────────
     if signal is not None and len(signal) > 0:
         with st.spinner("Processing signal…"):
@@ -802,54 +742,88 @@ def main():
             feat     = dict(zip(FEATURE_NAMES, features))
 
         # ── RUN MODEL ────────────────────────────────────────────────────
-        label = prob = method_note = reasons = None
+        label = prob = threshold = method_note = reasons = None
         imp_fig = None
+        individual_preds = {}   # name -> probability, populated in Ensemble mode
 
-        if model_choice == "XGBoost":
-            mdl = load_xgb_model(weights_path)
-
+        if model_choice == "Random Forest":
+            mdl = load_rf_model(MODEL_PATHS["Random Forest"])
             if mdl is None:
                 st.warning(
-                    f"XGBoost model not found at `{weights_path}`. "
+                    f"Random Forest model not found at `{MODEL_PATHS['Random Forest']}`. "
                     "Falling back to HRV heuristic."
                 )
-                label, prob, reasons = hrv_heuristic(features)
-                method_note = "HRV heuristic (XGBoost weights missing)"
-
+                label, prob, threshold, reasons = hrv_heuristic(features)
+                method_note = "HRV heuristic (Random Forest weights missing)"
             else:
-                label, prob = predict_xgb(mdl, features)
+                label, prob, threshold = predict_rf(mdl, features)
+                method_note = f"Random Forest — {MODEL_PATHS['Random Forest']}"
 
-                if isinstance(mdl, dict):
-                    threshold = mdl.get("threshold", 0.5)
-                else:
-                    threshold = 0.5
-                method_note = f"XGBoost — {weights_path}"
+        elif model_choice == "XGBoost":
+            mdl = load_xgb_model(MODEL_PATHS["XGBoost"])
+            if mdl is None:
+                st.warning(
+                    f"XGBoost model not found at `{MODEL_PATHS['XGBoost']}`. "
+                    "Falling back to HRV heuristic."
+                )
+                label, prob, threshold, reasons = hrv_heuristic(features)
+                method_note = "HRV heuristic (XGBoost weights missing)"
+            else:
+                label, prob, threshold = predict_xgb(mdl, features)
+                method_note = f"XGBoost — {MODEL_PATHS['XGBoost']}"
                 imp_fig = plot_feature_importance_xgb(mdl)
 
         elif model_choice == "CatBoost":
-
-            mdl = load_catboost_model(weights_path)
-
+            mdl = load_catboost_model(MODEL_PATHS["CatBoost"])
             if mdl is None:
                 st.warning(
-                    f"CatBoost model not found at `{weights_path}`. "
+                    f"CatBoost model not found at `{MODEL_PATHS['CatBoost']}`. "
                     "Falling back to HRV heuristic."
                 )
-                label, prob, reasons = hrv_heuristic(features)
+                label, prob, threshold, reasons = hrv_heuristic(features)
                 method_note = "HRV heuristic (CatBoost weights missing)"
-
             else:
-                label, prob = predict_catboost(mdl, features)
-                if isinstance(mdl, dict):
-                    threshold = mdl.get("threshold", 0.5)
-                else:
-                    threshold = 0.5
-                method_note = f"CatBoost — {weights_path}"
+                label, prob, threshold = predict_catboost(mdl, features)
+                method_note = f"CatBoost — {MODEL_PATHS['CatBoost']}"
+                imp_fig = plot_feature_importance_cb(mdl)
+
+        elif model_choice == "Ensemble":
+            rf_model  = load_rf_model(MODEL_PATHS["Random Forest"])
+            xgb_model = load_xgb_model(MODEL_PATHS["XGBoost"])
+            cat_model = load_catboost_model(MODEL_PATHS["CatBoost"])
+
+            probs = []
+            if rf_model is not None:
+                _, p, _ = predict_rf(rf_model, features)
+                probs.append(p)
+                individual_preds["Random Forest"] = p
+            if xgb_model is not None:
+                _, p, _ = predict_xgb(xgb_model, features)
+                probs.append(p)
+                individual_preds["XGBoost"] = p
+            if cat_model is not None:
+                _, p, _ = predict_catboost(cat_model, features)
+                probs.append(p)
+                individual_preds["CatBoost"] = p
+
+            if len(probs) == 0:
+                st.warning(
+                    "None of the ensemble model weights were found "
+                    f"(`{MODEL_PATHS['Random Forest']}`, `{MODEL_PATHS['XGBoost']}`, "
+                    f"`{MODEL_PATHS['CatBoost']}`). Falling back to HRV heuristic."
+                )
+                label, prob, threshold, reasons = hrv_heuristic(features)
+                method_note = "HRV heuristic (no ensemble models found)"
+            else:
+                # final_prob = mean of the probabilities from every model that loaded
+                prob = float(np.mean(probs))
+                threshold = 0.5
+                label = "AFib" if prob >= threshold else "Normal"
+                method_note = f"Ensemble — mean of {len(probs)}/3 models"
 
         is_afib = label == "AFib"
 
     else:
-
         st.markdown(
             f"""
             <div style='padding:80px 20px; text-align:center;'>
@@ -862,7 +836,6 @@ def main():
             unsafe_allow_html=True
         )
         return
-        
 
     # ── ALERT BANNER ─────────────────────────────────────────────────────
     if is_afib:
@@ -876,7 +849,7 @@ def main():
             <div style='font-size:0.78rem; color:{COLORS["text_mid"]}; margin-top:3px;'>
               AFib probability: <strong>{prob*100:.1f}%</strong> — Consult a physician immediately.
               <br>
-              Decision threshold: <strong>{threshold*100:.0f}%</strong>
+              Method: <strong>{method_note}</strong> &nbsp;|&nbsp; Decision threshold: <strong>{threshold*100:.0f}%</strong>
             </div>
           </div>
         </div>""", unsafe_allow_html=True)
@@ -891,10 +864,28 @@ def main():
             <div style='font-size:0.78rem; color:{COLORS["text_mid"]}; margin-top:3px;'>
               AFib probability: <strong>{prob*100:.1f}%</strong> — No atrial fibrillation detected.
               <br>
-              Decision threshold: <strong>{threshold*100:.0f}%</strong>
+              Method: <strong>{method_note}</strong> &nbsp;|&nbsp; Decision threshold: <strong>{threshold*100:.0f}%</strong>
             </div>
           </div>
         </div>""", unsafe_allow_html=True)
+
+    # ── INDIVIDUAL MODEL PREDICTIONS (Ensemble mode) ────────────────────
+    if model_choice == "Ensemble" and show_individual and individual_preds:
+        rows_html = ""
+        for name, p in individual_preds.items():
+            rows_html += (
+                f"<div class='cs-pred-row'><span>{name}</span>"
+                f"<span style='color:{COLORS['text']}'>{p*100:.1f}%</span></div>"
+            )
+        rows_html += (
+            f"<div style='border-top:1px solid {COLORS['border']}; margin:6px 0;'></div>"
+            f"<div class='cs-pred-row' style='color:{COLORS['accent']}; font-weight:700;'>"
+            f"<span>Ensemble</span><span>{prob*100:.1f}%</span></div>"
+        )
+        st.markdown(
+            f"<div class='cs-card'><div class='cs-label'>Individual Model Predictions</div>{rows_html}</div>",
+            unsafe_allow_html=True,
+        )
 
     # ── METRICS ROW ──────────────────────────────────────────────────────
     m1, m2, m3, m4, m5 = st.columns(5)
@@ -990,7 +981,7 @@ def main():
               <div style='font-size:0.85rem; color:{COLORS["text_mid"]}; line-height:1.6;'>
                 Feature importance is available when an <strong style='color:{COLORS["text"]};'>XGBoost</strong>
                 or <strong style='color:{COLORS["text"]};'>CatBoost</strong> model is loaded from the sidebar.
-                Deep models (CNN/LSTM) and the HRV heuristic do not produce per-feature importance scores here.
+                The HRV heuristic and Random Forest models do not produce per-feature importance scores here.
               </div>
             </div>""", unsafe_allow_html=True)
 
