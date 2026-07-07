@@ -685,12 +685,6 @@ def main():
             signal = np.load(DEMO_FILES[demo_choice]["path"])
             signal_label = demo_choice
             demo_meta = DEMO_FILES[demo_choice]
-            if demo_choice == "Normal #3":
-                st.info(
-                "This sample is intentionally challenging. "
-                "Although labelled Normal, the model may classify "
-                "it as AFib because its HRV characteristics resemble AFib."
-                )
         except FileNotFoundError:
             st.error(f"⚠️ Demo file not found at `{DEMO_FILES[demo_choice]['path']}`.")
             st.stop()
