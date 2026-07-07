@@ -99,10 +99,27 @@ CSS = f"""
   [data-testid="stSidebar"] hr {{ border-color: {COLORS["border"]} !important; }}
   [data-testid="stSidebar"] .stRadio label span {{ font-size: 0.83rem !important; color: {COLORS["text_mid"]} !important; }}
   [data-testid="stSidebar"] .stSelectbox label {{ font-size: 0.75rem !important; color: {COLORS["text_dim"]} !important; text-transform: uppercase !important; letter-spacing: 0.08em !important; }}
-  [data-testid="stSidebar"] [data-baseweb="select"] {{ background: {COLORS["panel2"]} !important; border-color: {COLORS["border"]} !important; }}
-  [data-testid="stSidebar"] [data-baseweb="select"] > div {{ background: {COLORS["panel2"]} !important; border-color: {COLORS["border"]} !important; }}
-  [data-testid="stSidebar"] [data-baseweb="select"] * {{ background: {COLORS["panel2"]} !important; color: {COLORS["text"]} !important; -webkit-text-fill-color: {COLORS["text"]} !important; fill: {COLORS["text"]} !important; }}
+  [data-testid="stSidebar"] [data-testid="stSelectbox"],
+  [data-testid="stSidebar"] [data-testid="stSelectbox"] div,
+  [data-testid="stSidebar"] [data-baseweb="select"],
+  [data-testid="stSidebar"] [data-baseweb="select"] div,
+  [data-testid="stSidebar"] [data-baseweb="select"] > div,
+  [data-testid="stSidebar"] [data-baseweb="select"] > div > div {{
+    background: {COLORS["panel2"]} !important;
+    background-color: {COLORS["panel2"]} !important;
+    border-color: {COLORS["border"]} !important;
+    box-shadow: none !important;
+    color-scheme: light !important;
+  }}
+  [data-testid="stSidebar"] [data-testid="stSelectbox"] *,
+  [data-testid="stSidebar"] [data-baseweb="select"] * {{
+    color: {COLORS["text"]} !important;
+    -webkit-text-fill-color: {COLORS["text"]} !important;
+    fill: {COLORS["text"]} !important;
+  }}
   [data-testid="stSidebar"] [data-baseweb="select"] svg {{ fill: {COLORS["text_mid"]} !important; }}
+  div[data-baseweb="popover"],
+  div[data-baseweb="popover"] div {{ background: {COLORS["panel2"]} !important; background-color: {COLORS["panel2"]} !important; color-scheme: light !important; }}
   div[data-baseweb="popover"] [data-baseweb="menu"] {{ background: {COLORS["panel2"]} !important; border: 1px solid {COLORS["border"]} !important; }}
   div[data-baseweb="popover"] [data-baseweb="menu"] * {{ background: {COLORS["panel2"]} !important; color: {COLORS["text"]} !important; -webkit-text-fill-color: {COLORS["text"]} !important; }}
   div[data-baseweb="popover"] li[role="option"]:hover,
