@@ -159,13 +159,15 @@ FEATURE_DESCRIPTIONS = {
     "dominant_freq":"Dominant frequency","n_beats":"Number of detected R-peaks",
 }
 
+APP_DIR = Path(__file__).parent
+
 DEMO_FILES = {
-    "Normal #1": {"path": "samples/normal_1.npy", "record": "04043", "time": "0.5s", "sample": "68"},
-    "Normal #2": {"path": "samples/normal_2.npy", "record": "04043", "time": "2940.1s", "sample": "376,328"},
-    "Normal #3": {"path": "samples/normal_3.npy", "record": "04043", "time": "20332.2s", "sample": "2,602,516"},
-    "AFib #1":   {"path": "samples/afib_1.npy",   "record": "04043", "time": "2082.0s", "sample": "266,498"},
-    "AFib #2":   {"path": "samples/afib_2.npy",   "record": "04043", "time": "20197.5s", "sample": "2,585,284"},
-    "AFib #3":   {"path": "samples/afib_3.npy",   "record": "04043", "time": "20585.2s", "sample": "2,634,911"},
+    "Normal #1": {"path": str(APP_DIR / "samples/normal_1.npy"), "record": "04043", "time": "0.5s", "sample": "68"},
+    "Normal #2": {"path": str(APP_DIR / "samples/normal_2.npy"), "record": "04043", "time": "2940.1s", "sample": "376,328"},
+    "Normal #3": {"path": str(APP_DIR / "samples/normal_3.npy"), "record": "04043", "time": "20332.2s", "sample": "2,602,516"},
+    "AFib #1":   {"path": str(APP_DIR / "samples/afib_1.npy"),   "record": "04043", "time": "2082.0s", "sample": "266,498"},
+    "AFib #2":   {"path": str(APP_DIR / "samples/afib_2.npy"),   "record": "04043", "time": "20197.5s", "sample": "2,585,284"},
+    "AFib #3":   {"path": str(APP_DIR / "samples/afib_3.npy"),   "record": "04043", "time": "20585.2s", "sample": "2,634,911"},
 }
 
 # ============================================================
