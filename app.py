@@ -117,13 +117,16 @@ CSS = f"""
     -webkit-text-fill-color: {COLORS["text"]} !important;
     fill: {COLORS["text"]} !important;
   }}
-  [data-testid="stSidebar"] [data-baseweb="select"] svg {{ display: none !important; }}
+  [data-testid="stSidebar"] [data-baseweb="select"] svg {{ display: none !important; width: 0 !important; height: 0 !important; }}
   [data-testid="stSidebar"] [data-baseweb="select"] div:has(> svg) {{ background: transparent !important; background-color: transparent !important; }}
   [data-testid="stSidebar"] [data-baseweb="select"] [class*="Indicator"],
   [data-testid="stSidebar"] [data-baseweb="select"] > div > div:last-child {{
     background: transparent !important; background-color: transparent !important;
+    width: auto !important; min-width: 0 !important;
   }}
-  [data-testid="stSidebar"] [data-testid="stSelectbox"] [data-baseweb="select"] {{ position: relative !important; }}
+  [data-testid="stSidebar"] [data-testid="stSelectbox"] [data-baseweb="select"] {{
+    position: relative !important; overflow: hidden !important; border-radius: 8px !important;
+  }}
   /* Custom dropdown arrow drawn with CSS borders instead of a unicode glyph —
      avoids "tofu" fallback boxes when a font is missing the arrow character. */
   [data-testid="stSidebar"] [data-testid="stSelectbox"] [data-baseweb="select"]::after {{
@@ -148,12 +151,12 @@ CSS = f"""
   [data-testid="stSidebar"] .stNumberInput button svg {{ fill: {COLORS["text"]} !important; }}
 
   .stTabs [data-baseweb="tab-list"] {{ background: {COLORS["panel"]}; border-bottom: 1px solid {COLORS["border"]}; padding: 0 1.5rem; gap: 0; }}
-  .stTabs [data-baseweb="tab"] {{ color: {COLORS["text_mid"]} !important; -webkit-text-fill-color: {COLORS["text_mid"]} !important; font-family: 'Inter', sans-serif !important; font-size: 0.78rem !important; font-weight: 500 !important; letter-spacing: 0.07em !important; text-transform: uppercase !important; padding: 0.9rem 1.4rem !important; border-bottom: 2px solid transparent !important; margin-bottom: -1px !important; background: transparent !important; text-decoration: none !important; }}
-  .stTabs [data-baseweb="tab"]:link, .stTabs [data-baseweb="tab"]:visited, .stTabs [data-baseweb="tab"]:hover, .stTabs [data-baseweb="tab"]:active {{ color: {COLORS["text_mid"]} !important; -webkit-text-fill-color: {COLORS["text_mid"]} !important; text-decoration: none !important; }}
+  .stTabs [data-baseweb="tab"] {{ color: {COLORS["text"]} !important; -webkit-text-fill-color: {COLORS["text"]} !important; font-family: 'Inter', sans-serif !important; font-size: 0.78rem !important; font-weight: 500 !important; letter-spacing: 0.07em !important; text-transform: uppercase !important; padding: 0.9rem 1.4rem !important; border-bottom: 2px solid transparent !important; margin-bottom: -1px !important; background: transparent !important; text-decoration: none !important; }}
+  .stTabs [data-baseweb="tab"]:link, .stTabs [data-baseweb="tab"]:visited, .stTabs [data-baseweb="tab"]:hover, .stTabs [data-baseweb="tab"]:active {{ color: {COLORS["text"]} !important; -webkit-text-fill-color: {COLORS["text"]} !important; text-decoration: none !important; }}
   /* -webkit-text-fill-color must be repeated on every descendant (p, span, etc.)
      because Streamlit's own tab styles set it directly, and it takes priority
      over `color` on WebKit browsers — this is why labels were invisible. */
-  .stTabs [data-baseweb="tab"] * {{ color: {COLORS["text_mid"]} !important; -webkit-text-fill-color: {COLORS["text_mid"]} !important; }}
+  .stTabs [data-baseweb="tab"] * {{ color: {COLORS["text"]} !important; -webkit-text-fill-color: {COLORS["text"]} !important; }}
   .stTabs [aria-selected="true"] {{ color: {COLORS["accent"]} !important; -webkit-text-fill-color: {COLORS["accent"]} !important; border-bottom: 2px solid {COLORS["accent"]} !important; }}
   .stTabs [aria-selected="true"]:link, .stTabs [aria-selected="true"]:visited, .stTabs [aria-selected="true"]:hover, .stTabs [aria-selected="true"]:active {{ color: {COLORS["accent"]} !important; -webkit-text-fill-color: {COLORS["accent"]} !important; }}
   .stTabs [aria-selected="true"] * {{ color: {COLORS["accent"]} !important; -webkit-text-fill-color: {COLORS["accent"]} !important; }}
@@ -184,6 +187,18 @@ CSS = f"""
   ::-webkit-scrollbar-track {{ background: {COLORS["bg"]}; }}
   ::-webkit-scrollbar-thumb {{ background: {COLORS["border_light"]}; border-radius: 3px; }}
   code {{ background: {COLORS["panel2"]} !important; color: {COLORS["accent2"]} !important; border: 1px solid {COLORS["border"]} !important; border-radius: 4px !important; padding: 1px 5px !important; }}
+
+  /* Custom light-themed table — used instead of st.dataframe, whose canvas-based
+     grid follows Streamlit's own theme engine and ignores this stylesheet. */
+  .cs-table-wrap {{ max-height: 420px; overflow-y: auto; border: 1px solid {COLORS["border"]}; border-radius: 10px; }}
+  .cs-table {{ width: 100%; border-collapse: collapse; font-family: 'Inter', sans-serif; font-size: 0.82rem; }}
+  .cs-table thead th {{ position: sticky; top: 0; background: {COLORS["panel2"]}; color: {COLORS["text_dim"]}; text-transform: uppercase; font-size: 0.66rem; letter-spacing: 0.07em; font-weight: 700; text-align: left; padding: 10px 14px; border-bottom: 1px solid {COLORS["border"]}; }}
+  .cs-table tbody td {{ padding: 8px 14px; color: {COLORS["text"]}; border-bottom: 1px solid {COLORS["border"]}; background: {COLORS["panel"]}; }}
+  .cs-table tbody tr:last-child td {{ border-bottom: none; }}
+  .cs-table tbody tr:nth-child(even) td {{ background: {COLORS["panel2"]}; }}
+  .cs-table td:nth-child(2) {{ font-family: 'JetBrains Mono', monospace; color: {COLORS["accent2"]}; font-weight: 500; }}
+  .cs-table td:nth-child(3) {{ color: {COLORS["text_mid"]}; }}
+  .cs-table td:nth-child(4) {{ color: {COLORS["text_mid"]}; }}
   pre  {{ background: {COLORS["panel2"]} !important; border: 1px solid {COLORS["border"]} !important; border-radius: 8px !important; }}
 </style>
 """
@@ -598,6 +613,32 @@ def plot_feature_importance_xgb(model):
     except Exception:
         return None
 
+def plot_feature_importance_rf(model):
+    try:
+        clf, _, _ = _unpack_model(model)
+        imps = clf.feature_importances_
+        df = pd.DataFrame({"Feature": FEATURE_NAMES[:len(imps)], "Importance": imps})
+        df = df.sort_values("Importance", ascending=True).tail(15)
+        fig = go.Figure(go.Bar(
+            x=df["Importance"], y=df["Feature"], orientation="h",
+            marker_color=COLORS["accent2"],
+            text=[f"{v:.3f}" for v in df["Importance"]],
+            textposition="outside",
+            textfont=dict(family="JetBrains Mono", size=10, color=COLORS["text_mid"]),
+        ))
+        fig.update_layout(
+            **_base_layout(height=380),
+            title=dict(text="Random Forest Feature Importance",
+                       font=dict(family="Inter", size=12, color=COLORS["text_mid"])),
+            xaxis=dict(color=COLORS["text_mid"], gridcolor="rgba(91,117,104,0.25)",
+                       tickfont=dict(family="JetBrains Mono", size=10)),
+            yaxis=dict(color=COLORS["text"], tickfont=dict(family="Inter", size=11)),
+            margin=dict(l=130, r=60, t=45, b=40),
+        )
+        return fig
+    except Exception:
+        return None
+
 def plot_feature_importance_cb(model):
     try:
         clf, _, _ = _unpack_model(model)
@@ -808,6 +849,7 @@ def main():
         # ── RUN MODEL ────────────────────────────────────────────────────
         label = prob = threshold = method_note = reasons = None
         imp_fig = None
+        imp_figs = {}   # model name -> importance figure; may hold several in Ensemble mode
         individual_preds = {}   # name -> probability, populated in Ensemble mode
 
         if model_choice == "Random Forest":
@@ -822,6 +864,9 @@ def main():
             else:
                 label, prob, threshold = predict_rf(mdl, features)
                 method_note = f"Random Forest — {MODEL_PATHS['Random Forest']}"
+                imp_fig = plot_feature_importance_rf(mdl)
+                if imp_fig:
+                    imp_figs["Random Forest"] = imp_fig
 
         elif model_choice == "XGBoost":
             mdl = load_xgb_model(MODEL_PATHS["XGBoost"])
@@ -836,6 +881,8 @@ def main():
                 label, prob, threshold = predict_xgb(mdl, features)
                 method_note = f"XGBoost — {MODEL_PATHS['XGBoost']}"
                 imp_fig = plot_feature_importance_xgb(mdl)
+                if imp_fig:
+                    imp_figs["XGBoost"] = imp_fig
 
         elif model_choice == "CatBoost":
             mdl = load_catboost_model(MODEL_PATHS["CatBoost"])
@@ -850,6 +897,8 @@ def main():
                 label, prob, threshold = predict_catboost(mdl, features)
                 method_note = f"CatBoost — {MODEL_PATHS['CatBoost']}"
                 imp_fig = plot_feature_importance_cb(mdl)
+                if imp_fig:
+                    imp_figs["CatBoost"] = imp_fig
 
         elif model_choice == "Ensemble":
             rf_model  = load_rf_model(MODEL_PATHS["Random Forest"])
@@ -861,14 +910,23 @@ def main():
                 _, p, _ = predict_rf(rf_model, features)
                 probs.append(p)
                 individual_preds["Random Forest"] = p
+                fig = plot_feature_importance_rf(rf_model)
+                if fig:
+                    imp_figs["Random Forest"] = fig
             if xgb_model is not None:
                 _, p, _ = predict_xgb(xgb_model, features)
                 probs.append(p)
                 individual_preds["XGBoost"] = p
+                fig = plot_feature_importance_xgb(xgb_model)
+                if fig:
+                    imp_figs["XGBoost"] = fig
             if cat_model is not None:
                 _, p, _ = predict_catboost(cat_model, features)
                 probs.append(p)
                 individual_preds["CatBoost"] = p
+                fig = plot_feature_importance_cb(cat_model)
+                if fig:
+                    imp_figs["CatBoost"] = fig
 
             if len(probs) == 0:
                 st.warning(
@@ -1011,7 +1069,19 @@ def main():
                      "Description":FEATURE_DESCRIPTIONS.get(n,"")}
                     for n, v in zip(FEATURE_NAMES, features)]
             df_feat = pd.DataFrame(rows)
-            st.dataframe(df_feat, use_container_width=True, height=420, hide_index=True)
+            table_rows_html = "".join(
+                f"<tr><td>{r['Feature']}</td><td>{r['Value']}</td>"
+                f"<td>{r['Unit']}</td><td>{r['Description']}</td></tr>"
+                for r in rows
+            )
+            st.markdown(f"""
+            <div class="cs-table-wrap">
+              <table class="cs-table">
+                <thead><tr><th>Feature</th><th>Value</th><th>Unit</th><th>Description</th></tr></thead>
+                <tbody>{table_rows_html}</tbody>
+              </table>
+            </div>
+            """, unsafe_allow_html=True)
         with right:
             st.plotly_chart(plot_radar(features), use_container_width=True)
 
@@ -1035,17 +1105,26 @@ def main():
                     )
 
     with tabs[3]:
-        if imp_fig:
-            st.plotly_chart(imp_fig, use_container_width=True)
+        if imp_figs:
+            names = list(imp_figs.keys())
+            if len(names) == 1:
+                st.plotly_chart(imp_figs[names[0]], use_container_width=True)
+            else:
+                # Ensemble mode with more than one model loaded — show each side by side.
+                imp_cols = st.columns(len(names))
+                for col, name in zip(imp_cols, names):
+                    with col:
+                        st.plotly_chart(imp_figs[name], use_container_width=True)
             st.caption("Importance is derived from the loaded model weights. "
                        "Higher = more influential in the AFib/Normal decision.")
         else:
             st.markdown(f"""
             <div class='cs-card'>
               <div style='font-size:0.85rem; color:{COLORS["text_mid"]}; line-height:1.6;'>
-                Feature importance is available when an <strong style='color:{COLORS["text"]};'>XGBoost</strong>
-                or <strong style='color:{COLORS["text"]};'>CatBoost</strong> model is loaded from the sidebar.
-                The HRV heuristic and Random Forest models do not produce per-feature importance scores here.
+                Feature importance is available when a <strong style='color:{COLORS["text"]};'>Random Forest</strong>,
+                <strong style='color:{COLORS["text"]};'>XGBoost</strong>, or
+                <strong style='color:{COLORS["text"]};'>CatBoost</strong> model is loaded from the sidebar.
+                The HRV heuristic fallback does not produce per-feature importance scores here.
               </div>
             </div>""", unsafe_allow_html=True)
 
