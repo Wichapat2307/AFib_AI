@@ -169,6 +169,13 @@ CSS = f"""
   }}
   .stTabs [data-baseweb="tab"]:link, .stTabs [data-baseweb="tab"]:visited, .stTabs [data-baseweb="tab"]:hover, .stTabs [data-baseweb="tab"]:active {{ color: {COLORS["text"]} !important; -webkit-text-fill-color: {COLORS["text"]} !important; text-decoration: none !important; }}
   .stTabs [data-baseweb="tab"] * {{ color: {COLORS["text"]} !important; -webkit-text-fill-color: {COLORS["text"]} !important; }}
+  /* Explicit [aria-selected="false"] qualifier — matches the specificity of
+     whatever internal Streamlit rule was winning the cascade fight and
+     re-graying inactive tab text despite the !important rules above. */
+  .stTabs [data-baseweb="tab"][aria-selected="false"],
+  .stTabs [data-baseweb="tab"][aria-selected="false"] * {{
+    color: {COLORS["text"]} !important; -webkit-text-fill-color: {COLORS["text"]} !important;
+  }}
   .stTabs [aria-selected="true"] {{
     background: transparent !important; border-bottom: 2px solid {COLORS["accent"]} !important;
     color: {COLORS["accent"]} !important; -webkit-text-fill-color: {COLORS["accent"]} !important;
