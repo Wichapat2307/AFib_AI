@@ -91,7 +91,14 @@ CSS = f"""
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&family=Sora:wght@600;700&display=swap');
   * {{ box-sizing: border-box; }}
-  .stApp {{ background: {COLORS["bg"]}; font-family: 'Inter', sans-serif; color: {COLORS["text"]}; }}
+  /* Force light-themed native form controls everywhere (select internals, radio
+     buttons, checkboxes, number steppers). Without this, a browser/OS set to
+     dark mode renders those controls' native widgets in dark colors underneath
+     our custom styling — this is the cause of the dark box/circle "leaks". */
+  html, body, :root {{ color-scheme: light !important; }}
+  input, select, button {{ color-scheme: light !important; }}
+  input[type="radio"], input[type="checkbox"] {{ accent-color: {COLORS["accent"]} !important; color-scheme: light !important; }}
+  .stApp {{ background: {COLORS["bg"]}; font-family: 'Inter', sans-serif; color: {COLORS["text"]}; color-scheme: light !important; }}
   .main .block-container {{ padding: 1.5rem 2rem !important; max-width: 100% !important; }}
 
   [data-testid="stSidebar"] {{ background: {COLORS["panel"]} !important; border-right: 1px solid {COLORS["border"]} !important; }}
@@ -150,16 +157,28 @@ CSS = f"""
   [data-testid="stSidebar"] .stNumberInput button {{ background: {COLORS["panel2"]} !important; border-color: {COLORS["border"]} !important; }}
   [data-testid="stSidebar"] .stNumberInput button svg {{ fill: {COLORS["text"]} !important; }}
 
-  .stTabs [data-baseweb="tab-list"] {{ background: {COLORS["panel"]}; border-bottom: 1px solid {COLORS["border"]}; padding: 0 1.5rem; gap: 0; }}
-  .stTabs [data-baseweb="tab"] {{ color: {COLORS["text"]} !important; -webkit-text-fill-color: {COLORS["text"]} !important; font-family: 'Inter', sans-serif !important; font-size: 0.78rem !important; font-weight: 500 !important; letter-spacing: 0.07em !important; text-transform: uppercase !important; padding: 0.9rem 1.4rem !important; border-bottom: 2px solid transparent !important; margin-bottom: -1px !important; background: transparent !important; text-decoration: none !important; }}
+  .stTabs [data-baseweb="tab-list"] {{ background: transparent; border-bottom: 1px solid {COLORS["border"]}; padding: 0 1.5rem 0.6rem; gap: 8px; }}
+  .stTabs [data-baseweb="tab"] {{
+    color: {COLORS["text"]} !important; -webkit-text-fill-color: {COLORS["text"]} !important;
+    font-family: 'Inter', sans-serif !important; font-size: 0.78rem !important; font-weight: 600 !important;
+    letter-spacing: 0.04em !important; text-transform: none !important;
+    padding: 0.55rem 1.1rem !important; margin-bottom: 0 !important;
+    background: {COLORS["panel2"]} !important; border: 1px solid {COLORS["border"]} !important;
+    border-radius: 20px !important; text-decoration: none !important;
+  }}
   .stTabs [data-baseweb="tab"]:link, .stTabs [data-baseweb="tab"]:visited, .stTabs [data-baseweb="tab"]:hover, .stTabs [data-baseweb="tab"]:active {{ color: {COLORS["text"]} !important; -webkit-text-fill-color: {COLORS["text"]} !important; text-decoration: none !important; }}
   /* -webkit-text-fill-color must be repeated on every descendant (p, span, etc.)
      because Streamlit's own tab styles set it directly, and it takes priority
-     over `color` on WebKit browsers — this is why labels were invisible. */
+     over `color` on WebKit browsers. A solid chip background (above) is the
+     real safety net: even if text color is ever overridden again, the chip
+     shape and border still make the tab legible and clearly clickable. */
   .stTabs [data-baseweb="tab"] * {{ color: {COLORS["text"]} !important; -webkit-text-fill-color: {COLORS["text"]} !important; }}
-  .stTabs [aria-selected="true"] {{ color: {COLORS["accent"]} !important; -webkit-text-fill-color: {COLORS["accent"]} !important; border-bottom: 2px solid {COLORS["accent"]} !important; }}
-  .stTabs [aria-selected="true"]:link, .stTabs [aria-selected="true"]:visited, .stTabs [aria-selected="true"]:hover, .stTabs [aria-selected="true"]:active {{ color: {COLORS["accent"]} !important; -webkit-text-fill-color: {COLORS["accent"]} !important; }}
-  .stTabs [aria-selected="true"] * {{ color: {COLORS["accent"]} !important; -webkit-text-fill-color: {COLORS["accent"]} !important; }}
+  .stTabs [aria-selected="true"] {{
+    background: {COLORS["accent"]} !important; border-color: {COLORS["accent"]} !important;
+    color: white !important; -webkit-text-fill-color: white !important;
+  }}
+  .stTabs [aria-selected="true"]:link, .stTabs [aria-selected="true"]:visited, .stTabs [aria-selected="true"]:hover, .stTabs [aria-selected="true"]:active {{ color: white !important; -webkit-text-fill-color: white !important; }}
+  .stTabs [aria-selected="true"] * {{ color: white !important; -webkit-text-fill-color: white !important; }}
   .stTabs [data-baseweb="tab-panel"] {{ padding: 1.5rem 2rem !important; background: {COLORS["bg"]}; }}
 
   [data-testid="metric-container"] {{ background: {COLORS["panel"]}; border: 1px solid {COLORS["border"]}; border-radius: 10px; padding: 1rem !important; }}
@@ -577,94 +596,6 @@ def plot_radar(features):
     )
     return fig
 
-def plot_feature_importance_xgb(model):
-    try:
-        clf, _, _ = _unpack_model(model)
-        scores = clf.get_booster().get_fscore()
-        if not scores:
-            scores = dict(zip([f"f{i}" for i in range(len(FEATURE_NAMES))],
-                              clf.feature_importances_))
-        named = {}
-        for k, v in scores.items():
-            try:
-                idx = int(k.replace("f",""))
-                named[FEATURE_NAMES[idx]] = v
-            except Exception:
-                named[k] = v
-        df = pd.DataFrame({"Feature":list(named.keys()),"Importance":list(named.values())})
-        df = df.sort_values("Importance", ascending=True).tail(15)
-        fig = go.Figure(go.Bar(
-            x=df["Importance"], y=df["Feature"], orientation="h",
-            marker_color=COLORS["accent"],
-            text=[f"{v:.0f}" for v in df["Importance"]],
-            textposition="outside",
-            textfont=dict(family="JetBrains Mono", size=10, color=COLORS["text_mid"]),
-        ))
-        fig.update_layout(
-            **_base_layout(height=380),
-            title=dict(text="XGBoost Feature Importance",
-                       font=dict(family="Inter", size=12, color=COLORS["text_mid"])),
-            xaxis=dict(color=COLORS["text_mid"], gridcolor="rgba(91,117,104,0.25)",
-                       tickfont=dict(family="JetBrains Mono", size=10)),
-            yaxis=dict(color=COLORS["text"], tickfont=dict(family="Inter", size=11)),
-            margin=dict(l=130, r=60, t=45, b=40),
-        )
-        return fig
-    except Exception:
-        return None
-
-def plot_feature_importance_rf(model):
-    try:
-        clf, _, _ = _unpack_model(model)
-        imps = clf.feature_importances_
-        df = pd.DataFrame({"Feature": FEATURE_NAMES[:len(imps)], "Importance": imps})
-        df = df.sort_values("Importance", ascending=True).tail(15)
-        fig = go.Figure(go.Bar(
-            x=df["Importance"], y=df["Feature"], orientation="h",
-            marker_color=COLORS["accent2"],
-            text=[f"{v:.3f}" for v in df["Importance"]],
-            textposition="outside",
-            textfont=dict(family="JetBrains Mono", size=10, color=COLORS["text_mid"]),
-        ))
-        fig.update_layout(
-            **_base_layout(height=380),
-            title=dict(text="Random Forest Feature Importance",
-                       font=dict(family="Inter", size=12, color=COLORS["text_mid"])),
-            xaxis=dict(color=COLORS["text_mid"], gridcolor="rgba(91,117,104,0.25)",
-                       tickfont=dict(family="JetBrains Mono", size=10)),
-            yaxis=dict(color=COLORS["text"], tickfont=dict(family="Inter", size=11)),
-            margin=dict(l=130, r=60, t=45, b=40),
-        )
-        return fig
-    except Exception:
-        return None
-
-def plot_feature_importance_cb(model):
-    try:
-        clf, _, _ = _unpack_model(model)
-        imps = clf.get_feature_importance()
-        df = pd.DataFrame({"Feature": FEATURE_NAMES[:len(imps)], "Importance": imps})
-        df = df.sort_values("Importance", ascending=True).tail(15)
-        fig = go.Figure(go.Bar(
-            x=df["Importance"], y=df["Feature"], orientation="h",
-            marker_color=COLORS["warn"],
-            text=[f"{v:.1f}" for v in df["Importance"]],
-            textposition="outside",
-            textfont=dict(family="JetBrains Mono", size=10, color=COLORS["text_mid"]),
-        ))
-        fig.update_layout(
-            **_base_layout(height=380),
-            title=dict(text="CatBoost Feature Importance",
-                       font=dict(family="Inter", size=12, color=COLORS["text_mid"])),
-            xaxis=dict(color=COLORS["text_mid"], gridcolor="rgba(91,117,104,0.25)",
-                       tickfont=dict(family="JetBrains Mono", size=10)),
-            yaxis=dict(color=COLORS["text"], tickfont=dict(family="Inter", size=11)),
-            margin=dict(l=130, r=60, t=45, b=40),
-        )
-        return fig
-    except Exception:
-        return None
-
 # ═══════════════════════════════════════════════════════════════════════════
 # MAIN
 # ═══════════════════════════════════════════════════════════════════════════
@@ -848,8 +779,6 @@ def main():
 
         # ── RUN MODEL ────────────────────────────────────────────────────
         label = prob = threshold = method_note = reasons = None
-        imp_fig = None
-        imp_figs = {}   # model name -> importance figure; may hold several in Ensemble mode
         individual_preds = {}   # name -> probability, populated in Ensemble mode
 
         if model_choice == "Random Forest":
@@ -864,9 +793,6 @@ def main():
             else:
                 label, prob, threshold = predict_rf(mdl, features)
                 method_note = f"Random Forest — {MODEL_PATHS['Random Forest']}"
-                imp_fig = plot_feature_importance_rf(mdl)
-                if imp_fig:
-                    imp_figs["Random Forest"] = imp_fig
 
         elif model_choice == "XGBoost":
             mdl = load_xgb_model(MODEL_PATHS["XGBoost"])
@@ -880,9 +806,6 @@ def main():
             else:
                 label, prob, threshold = predict_xgb(mdl, features)
                 method_note = f"XGBoost — {MODEL_PATHS['XGBoost']}"
-                imp_fig = plot_feature_importance_xgb(mdl)
-                if imp_fig:
-                    imp_figs["XGBoost"] = imp_fig
 
         elif model_choice == "CatBoost":
             mdl = load_catboost_model(MODEL_PATHS["CatBoost"])
@@ -896,9 +819,6 @@ def main():
             else:
                 label, prob, threshold = predict_catboost(mdl, features)
                 method_note = f"CatBoost — {MODEL_PATHS['CatBoost']}"
-                imp_fig = plot_feature_importance_cb(mdl)
-                if imp_fig:
-                    imp_figs["CatBoost"] = imp_fig
 
         elif model_choice == "Ensemble":
             rf_model  = load_rf_model(MODEL_PATHS["Random Forest"])
@@ -910,23 +830,14 @@ def main():
                 _, p, _ = predict_rf(rf_model, features)
                 probs.append(p)
                 individual_preds["Random Forest"] = p
-                fig = plot_feature_importance_rf(rf_model)
-                if fig:
-                    imp_figs["Random Forest"] = fig
             if xgb_model is not None:
                 _, p, _ = predict_xgb(xgb_model, features)
                 probs.append(p)
                 individual_preds["XGBoost"] = p
-                fig = plot_feature_importance_xgb(xgb_model)
-                if fig:
-                    imp_figs["XGBoost"] = fig
             if cat_model is not None:
                 _, p, _ = predict_catboost(cat_model, features)
                 probs.append(p)
                 individual_preds["CatBoost"] = p
-                fig = plot_feature_importance_cb(cat_model)
-                if fig:
-                    imp_figs["CatBoost"] = fig
 
             if len(probs) == 0:
                 st.warning(
@@ -1046,7 +957,7 @@ def main():
     st.markdown("---")
 
     # ── TABS ─────────────────────────────────────────────────────────────
-    tabs = st.tabs(["💓  RR Tachogram", "🌀  Poincaré", "📊  HRV Features", "🌲  Feature Importance"])
+    tabs = st.tabs(["💓  RR Tachogram", "🌀  Poincaré", "📊  HRV Features"])
 
     with tabs[0]:
         if len(rr_ms) >= 3:
@@ -1103,30 +1014,6 @@ def main():
                         f"<div style='width:{bw}%;background:{clr};height:100%;border-radius:4px'></div></div>",
                         unsafe_allow_html=True,
                     )
-
-    with tabs[3]:
-        if imp_figs:
-            names = list(imp_figs.keys())
-            if len(names) == 1:
-                st.plotly_chart(imp_figs[names[0]], use_container_width=True)
-            else:
-                # Ensemble mode with more than one model loaded — show each side by side.
-                imp_cols = st.columns(len(names))
-                for col, name in zip(imp_cols, names):
-                    with col:
-                        st.plotly_chart(imp_figs[name], use_container_width=True)
-            st.caption("Importance is derived from the loaded model weights. "
-                       "Higher = more influential in the AFib/Normal decision.")
-        else:
-            st.markdown(f"""
-            <div class='cs-card'>
-              <div style='font-size:0.85rem; color:{COLORS["text_mid"]}; line-height:1.6;'>
-                Feature importance is available when a <strong style='color:{COLORS["text"]};'>Random Forest</strong>,
-                <strong style='color:{COLORS["text"]};'>XGBoost</strong>, or
-                <strong style='color:{COLORS["text"]};'>CatBoost</strong> model is loaded from the sidebar.
-                The HRV heuristic fallback does not produce per-feature importance scores here.
-              </div>
-            </div>""", unsafe_allow_html=True)
 
     # ── DOWNLOAD ─────────────────────────────────────────────────────────
     st.markdown("---")
