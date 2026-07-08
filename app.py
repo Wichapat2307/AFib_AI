@@ -91,10 +91,6 @@ CSS = f"""
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&family=Sora:wght@600;700&display=swap');
   * {{ box-sizing: border-box; }}
-  /* Force light-themed native form controls everywhere (select internals, radio
-     buttons, checkboxes, number steppers). Without this, a browser/OS set to
-     dark mode renders those controls' native widgets in dark colors underneath
-     our custom styling — this is the cause of the dark box/circle "leaks". */
   html, body, :root {{ color-scheme: light !important; }}
   input, select, button {{ color-scheme: light !important; }}
   input[type="radio"], input[type="checkbox"] {{ accent-color: {COLORS["accent"]} !important; color-scheme: light !important; }}
@@ -134,8 +130,6 @@ CSS = f"""
   [data-testid="stSidebar"] [data-testid="stSelectbox"] [data-baseweb="select"] {{
     position: relative !important; overflow: hidden !important; border-radius: 8px !important;
   }}
-  /* Custom dropdown arrow drawn with CSS borders instead of a unicode glyph —
-     avoids "tofu" fallback boxes when a font is missing the arrow character. */
   [data-testid="stSidebar"] [data-testid="stSelectbox"] [data-baseweb="select"]::after {{
     content: "";
     position: absolute; right: 16px; top: 50%; transform: translateY(-50%);
@@ -161,6 +155,8 @@ CSS = f"""
     background: {COLORS["text"]} !important; border-bottom: none !important;
     border-radius: 10px !important; padding: 0.4rem 1rem !important; gap: 4px;
   }}
+  .stTabs [data-baseweb="tab-highlight"] {{ background: transparent !important; }}
+  .stTabs [data-baseweb="tab-border"] {{ background: transparent !important; }}
   .stTabs [data-baseweb="tab"] {{
     color: {COLORS["white"]} !important; -webkit-text-fill-color: {COLORS["white"]} !important;
     font-family: 'Inter', sans-serif !important; font-size: 0.78rem !important; font-weight: 600 !important;
@@ -173,16 +169,14 @@ CSS = f"""
   }}
   .stTabs [data-baseweb="tab"]:link, .stTabs [data-baseweb="tab"]:visited, .stTabs [data-baseweb="tab"]:hover, .stTabs [data-baseweb="tab"]:active {{ color: {COLORS["white"]} !important; -webkit-text-fill-color: {COLORS["white"]} !important; text-decoration: none !important; }}
   .stTabs [data-baseweb="tab"] * {{ color: {COLORS["white"]} !important; -webkit-text-fill-color: {COLORS["white"]} !important; }}
-  /* Explicit [aria-selected="false"] qualifier — matches the specificity of
-     whatever internal Streamlit rule was winning the cascade fight and
-     re-graying inactive tab text despite the !important rules above. */
   .stTabs [data-baseweb="tab"][aria-selected="false"],
   .stTabs [data-baseweb="tab"][aria-selected="false"] * {{
     color: {COLORS["white"]} !important; -webkit-text-fill-color: {COLORS["white"]} !important;
   }}
   .stTabs [aria-selected="true"] {{
-    background: rgba(255,255,255,0.14) !important;
+    background: {COLORS["accent"]} !important;
     color: {COLORS["white"]} !important; -webkit-text-fill-color: {COLORS["white"]} !important;
+    border-bottom: none !important; box-shadow: none !important;
     opacity: 1;
   }}
   .stTabs [aria-selected="true"]:link, .stTabs [aria-selected="true"]:visited, .stTabs [aria-selected="true"]:hover, .stTabs [aria-selected="true"]:active {{ color: {COLORS["white"]} !important; -webkit-text-fill-color: {COLORS["white"]} !important; }}
@@ -215,8 +209,6 @@ CSS = f"""
   ::-webkit-scrollbar-thumb {{ background: {COLORS["border_light"]}; border-radius: 3px; }}
   code {{ background: {COLORS["panel2"]} !important; color: {COLORS["accent2"]} !important; border: 1px solid {COLORS["border"]} !important; border-radius: 4px !important; padding: 1px 5px !important; }}
 
-  /* Custom light-themed table — used instead of st.dataframe, whose canvas-based
-     grid follows Streamlit's own theme engine and ignores this stylesheet. */
   .cs-table-wrap {{ max-height: 420px; overflow-y: auto; border: 1px solid {COLORS["border"]}; border-radius: 10px; }}
   .cs-table {{ width: 100%; border-collapse: collapse; font-family: 'Inter', sans-serif; font-size: 0.82rem; }}
   .cs-table thead th {{ position: sticky; top: 0; background: {COLORS["panel2"]}; color: {COLORS["text_dim"]}; text-transform: uppercase; font-size: 0.66rem; letter-spacing: 0.07em; font-weight: 700; text-align: left; padding: 10px 14px; border-bottom: 1px solid {COLORS["border"]}; }}
@@ -291,10 +283,9 @@ DEMO_FILES = {
 def bandpass_filter(signal, fs=FS, low=0.5, high=40.0):
     nyq = fs / 2
     b, a = butter(4, [low/nyq, high/nyq], btype="band")
-    # filtfilt needs signal longer than 3x filter order
     min_len = 3 * max(len(a), len(b))
     if len(signal) <= min_len:
-        return signal  # return as-is if too short
+        return signal
     return filtfilt(b, a, signal)
 
 def preprocess(signal, fs=FS):
@@ -400,8 +391,6 @@ def load_catboost_model(path: str):
 # ═══════════════════════════════════════════════════════════════════════════
 
 def _unpack_model(model):
-    """Return (clf, imputer, threshold) whether model is a bare classifier
-    or a dict bundle like {"model":..., "imputer":..., "threshold":...}."""
     if isinstance(model, dict):
         return model["model"], model.get("imputer"), float(model.get("threshold", 0.5))
     return model, None, 0.5
@@ -613,7 +602,6 @@ def plot_radar(features):
 # ═══════════════════════════════════════════════════════════════════════════
 
 def main():
-    # ── SIDEBAR ──────────────────────────────────────────────────────────
     with st.sidebar:
         st.markdown(f"""
         <div style='padding:1rem 0 0.8rem;'>
@@ -652,7 +640,6 @@ def main():
         window_index  = st.number_input("Window index (multi-window files)",
                                         min_value=0, value=0, step=1)
 
-        # ── MODEL SELECTION ─────────────────────────────────────────────
         st.divider()
         st.markdown(f'<div class="cs-label">Model Selection</div>', unsafe_allow_html=True)
 
@@ -660,7 +647,7 @@ def main():
         model_choice_raw = st.radio(
             "Model",
             MODEL_OPTIONS,
-            index=3,  # Ensemble is the default / recommended option
+            index=3,
             label_visibility="collapsed",
         )
         model_choice = model_choice_raw.replace(" ⭐", "")
@@ -679,7 +666,6 @@ def main():
                 st.code(path, language=None)
 
         st.divider()
-        # Model availability badges
         st.markdown(f'<div class="cs-label">Library Status</div>', unsafe_allow_html=True)
         for name, ok in [
             ("Random Forest", SKLEARN_AVAILABLE),
@@ -695,7 +681,6 @@ def main():
           ⚠️ Research tool only.<br>Not a certified medical device.<br>Consult a physician for diagnosis.
         </div>""", unsafe_allow_html=True)
 
-    # ── TOP BAR ──────────────────────────────────────────────────────────
     st.markdown(f"""
     <div style='background:{COLORS["panel"]}; border-bottom:1px solid {COLORS["border"]};
                 padding:0.85rem 2rem; display:flex; align-items:center;
@@ -711,7 +696,6 @@ def main():
     </div>
     """, unsafe_allow_html=True)
 
-    # ── SIGNAL LOADING ───────────────────────────────────────────────────
     signal = None
     signal_label = "Unknown"
     demo_meta = None
@@ -738,7 +722,6 @@ def main():
             signal = df.iloc[:, 0].values
             signal_label = uploaded_file.name
 
-    # ── SIGNAL INFO DISPLAY ──────────────────────────────────────────────
     if signal is not None:
         total_seconds = len(signal) / fs_input
         duration_str = f"{total_seconds:.1f}s"
@@ -779,7 +762,6 @@ def main():
 </div>
 """, unsafe_allow_html=True)
 
-    # ── PREPROCESS + FEATURES ────────────────────────────────────────────
     if signal is not None and len(signal) > 0:
         with st.spinner("Processing signal…"):
             proc     = preprocess(signal, fs=fs_input)
@@ -789,9 +771,8 @@ def main():
             features = extract_hrv(signal, fs=fs_input)
             feat     = dict(zip(FEATURE_NAMES, features))
 
-        # ── RUN MODEL ────────────────────────────────────────────────────
         label = prob = threshold = method_note = reasons = None
-        individual_preds = {}   # name -> probability, populated in Ensemble mode
+        individual_preds = {}
 
         if model_choice == "Random Forest":
             mdl = load_rf_model(MODEL_PATHS["Random Forest"])
@@ -860,7 +841,6 @@ def main():
                 label, prob, threshold, reasons = hrv_heuristic(features)
                 method_note = "HRV heuristic (no ensemble models found)"
             else:
-                # final_prob = mean of the probabilities from every model that loaded
                 prob = float(np.mean(probs))
                 threshold = 0.3
                 label = "AFib" if prob >= threshold else "Normal"
@@ -882,7 +862,6 @@ def main():
         )
         return
 
-    # ── ALERT BANNER ─────────────────────────────────────────────────────
     if is_afib:
         st.markdown(f"""
         <div class='cs-alert cs-alert-afib'>
@@ -914,7 +893,6 @@ def main():
           </div>
         </div>""", unsafe_allow_html=True)
 
-    # ── INDIVIDUAL MODEL PREDICTIONS (Ensemble mode) ────────────────────
     if model_choice == "Ensemble" and show_individual and individual_preds:
         rows_html = ""
         for name, p in individual_preds.items():
@@ -932,7 +910,6 @@ def main():
             unsafe_allow_html=True,
         )
 
-    # ── METRICS ROW ──────────────────────────────────────────────────────
     m1, m2, m3, m4, m5 = st.columns(5)
     m1.metric("AFib Probability", f"{prob*100:.1f}%",
               delta="HIGH ⚠" if is_afib else "Normal",
@@ -945,7 +922,6 @@ def main():
 
     st.markdown("<div style='height:6px'></div>", unsafe_allow_html=True)
 
-    # ── ECG + GAUGE ──────────────────────────────────────────────────────
     ecg_col, gauge_col = st.columns([3, 1])
     view_s = min(15, len(signal)/fs_input)
     n_view = int(view_s * fs_input)
@@ -968,7 +944,6 @@ def main():
 
     st.markdown("---")
 
-    # ── TABS ─────────────────────────────────────────────────────────────
     tabs = st.tabs(["💓  RR Tachogram", "🌀  Poincaré", "📊  HRV Features"])
 
     with tabs[0]:
@@ -1008,7 +983,6 @@ def main():
         with right:
             st.plotly_chart(plot_radar(features), use_container_width=True)
 
-        # Score breakdown (heuristic only)
         if reasons:
             with st.expander("🔍  Score breakdown (HRV heuristic)", expanded=False):
                 st.markdown(f"""
@@ -1027,7 +1001,6 @@ def main():
                         unsafe_allow_html=True,
                     )
 
-    # ── DOWNLOAD ─────────────────────────────────────────────────────────
     st.markdown("---")
     st.download_button(
         "⬇  Download HRV Features (CSV)",
