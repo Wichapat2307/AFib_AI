@@ -503,17 +503,19 @@ def plot_rr(rr_ms):
     fig.add_hline(y=m, line_dash="dash", line_color=COLORS["warn"], opacity=0.6,
                   annotation_text=f"Mean: {m:.0f}ms",
                   annotation_font=dict(color=COLORS["warn"], size=10))
-    fig.add_hrect(y0=600, y1=1000, fillcolor="rgba(31,204,122,0.05)", line_width=0,
+    fig.add_hrect(y0=600, y1=1000, fillcolor="rgba(31,204,122,0.16)", line_width=0,
                   annotation_text="Normal range",
                   annotation_position="top left",
                   annotation=dict(font_color=COLORS["success"], font_size=11))
     fig.update_layout(
         **_base_layout(height=260),
         title=dict(text="RR Interval Series", font=dict(family="Inter", size=12, color=COLORS["text_mid"])),
-        xaxis=dict(title="Beat #", color=COLORS["text_mid"], gridcolor="rgba(91,117,104,0.25)",
-                   tickfont=dict(family="JetBrains Mono", size=10)),
-        yaxis=dict(title="RR (ms)", color=COLORS["text_mid"], gridcolor="rgba(91,117,104,0.25)",
-                   tickfont=dict(family="JetBrains Mono", size=10)),
+        xaxis=dict(title=dict(text="Beat #", font=dict(color=COLORS["text_mid"])),
+                   color=COLORS["text_mid"], gridcolor="rgba(91,117,104,0.25)",
+                   tickfont=dict(family="JetBrains Mono", size=10, color=COLORS["text_mid"])),
+        yaxis=dict(title=dict(text="RR (ms)", font=dict(color=COLORS["text_mid"])),
+                   color=COLORS["text_mid"], gridcolor="rgba(91,117,104,0.25)",
+                   tickfont=dict(family="JetBrains Mono", size=10, color=COLORS["text_mid"])),
     )
     return fig
 
