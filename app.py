@@ -100,11 +100,7 @@ CSS = f"""
   [data-testid="stSidebar"] .stRadio label span {{ font-size: 0.83rem !important; color: {COLORS["text_mid"]} !important; }}
   [data-testid="stSidebar"] .stSelectbox label {{ font-size: 0.75rem !important; color: {COLORS["text_dim"]} !important; text-transform: uppercase !important; letter-spacing: 0.08em !important; }}
   [data-testid="stSidebar"] [data-testid="stSelectbox"],
-  [data-testid="stSidebar"] [data-testid="stSelectbox"] div,
-  [data-testid="stSidebar"] [data-baseweb="select"],
-  [data-testid="stSidebar"] [data-baseweb="select"] div,
-  [data-testid="stSidebar"] [data-baseweb="select"] > div,
-  [data-testid="stSidebar"] [data-baseweb="select"] > div > div {{
+  [data-testid="stSidebar"] [data-baseweb="select"] {{
     background: {COLORS["panel2"]} !important;
     background-color: {COLORS["panel2"]} !important;
     background-image: none !important;
@@ -114,12 +110,16 @@ CSS = f"""
   }}
   [data-testid="stSidebar"] [data-testid="stSelectbox"] *,
   [data-testid="stSidebar"] [data-baseweb="select"] * {{
+    background: {COLORS["panel2"]} !important;
+    background-color: {COLORS["panel2"]} !important;
+    background-image: none !important;
     color: {COLORS["text"]} !important;
     -webkit-text-fill-color: {COLORS["text"]} !important;
     fill: {COLORS["text"]} !important;
+    border-radius: 8px !important;
   }}
   [data-testid="stSidebar"] [data-baseweb="select"] svg {{ display: none !important; width: 0 !important; height: 0 !important; }}
-  [data-testid="stSidebar"] [data-baseweb="select"] div:has(> svg) {{ background: transparent !important; background-color: transparent !important; background-image: none !important; }}
+  [data-testid="stSidebar"] [data-baseweb="select"] *:has(> svg) {{ background: transparent !important; background-color: transparent !important; background-image: none !important; }}
   [data-testid="stSidebar"] [data-baseweb="select"] *::before,
   [data-testid="stSidebar"] [data-baseweb="select"] *::after {{
     content: none !important;
@@ -145,6 +145,17 @@ CSS = f"""
     box-shadow: none !important;
     border: none !important;
     border-radius: 8px !important;
+    clip-path: inset(0 round 8px) !important;
+  }}
+  [data-testid="stSidebar"] [data-testid="stSelectbox"] [data-baseweb="select"] > div > *:last-child {{
+    overflow: hidden !important;
+    border-radius: 8px !important;
+    width: 0 !important;
+    max-width: 0 !important;
+    min-width: 0 !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    display: none !important;
   }}
   [data-testid="stSidebar"] [data-testid="stSelectbox"] [data-baseweb="select"]::after {{
     content: "\25BE";
