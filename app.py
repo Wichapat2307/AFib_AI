@@ -119,11 +119,20 @@ CSS = f"""
   }}
   [data-testid="stSidebar"] [data-baseweb="select"] svg {{ display: none !important; }}
   [data-testid="stSidebar"] [data-baseweb="select"] div:has(> svg) {{ background: transparent !important; background-color: transparent !important; }}
+  [data-testid="stSidebar"] [data-baseweb="select"] [class*="Indicator"],
+  [data-testid="stSidebar"] [data-baseweb="select"] > div > div:last-child {{
+    background: transparent !important; background-color: transparent !important;
+  }}
   [data-testid="stSidebar"] [data-testid="stSelectbox"] [data-baseweb="select"] {{ position: relative !important; }}
+  /* Custom dropdown arrow drawn with CSS borders instead of a unicode glyph —
+     avoids "tofu" fallback boxes when a font is missing the arrow character. */
   [data-testid="stSidebar"] [data-testid="stSelectbox"] [data-baseweb="select"]::after {{
-    content: "\25BE";
-    position: absolute; right: 14px; top: 50%; transform: translateY(-50%);
-    color: {COLORS["text_mid"]}; font-size: 13px; pointer-events: none;
+    content: "";
+    position: absolute; right: 16px; top: 50%; transform: translateY(-50%);
+    width: 0; height: 0; pointer-events: none;
+    border-left: 4.5px solid transparent;
+    border-right: 4.5px solid transparent;
+    border-top: 5.5px solid {COLORS["text_mid"]};
   }}
   div[data-baseweb="popover"],
   div[data-baseweb="popover"] div {{ background: {COLORS["panel2"]} !important; background-color: {COLORS["panel2"]} !important; color-scheme: light !important; }}
@@ -139,12 +148,15 @@ CSS = f"""
   [data-testid="stSidebar"] .stNumberInput button svg {{ fill: {COLORS["text"]} !important; }}
 
   .stTabs [data-baseweb="tab-list"] {{ background: {COLORS["panel"]}; border-bottom: 1px solid {COLORS["border"]}; padding: 0 1.5rem; gap: 0; }}
-  .stTabs [data-baseweb="tab"] {{ color: {COLORS["text_mid"]} !important; font-family: 'Inter', sans-serif !important; font-size: 0.78rem !important; font-weight: 500 !important; letter-spacing: 0.07em !important; text-transform: uppercase !important; padding: 0.9rem 1.4rem !important; border-bottom: 2px solid transparent !important; margin-bottom: -1px !important; background: transparent !important; text-decoration: none !important; }}
-  .stTabs [data-baseweb="tab"]:link, .stTabs [data-baseweb="tab"]:visited, .stTabs [data-baseweb="tab"]:hover, .stTabs [data-baseweb="tab"]:active {{ color: {COLORS["text_mid"]} !important; text-decoration: none !important; }}
-  .stTabs [data-baseweb="tab"] * {{ color: {COLORS["text_mid"]} !important; }}
-  .stTabs [aria-selected="true"] {{ color: {COLORS["accent"]} !important; border-bottom: 2px solid {COLORS["accent"]} !important; }}
-  .stTabs [aria-selected="true"]:link, .stTabs [aria-selected="true"]:visited, .stTabs [aria-selected="true"]:hover, .stTabs [aria-selected="true"]:active {{ color: {COLORS["accent"]} !important; }}
-  .stTabs [aria-selected="true"] * {{ color: {COLORS["accent"]} !important; }}
+  .stTabs [data-baseweb="tab"] {{ color: {COLORS["text_mid"]} !important; -webkit-text-fill-color: {COLORS["text_mid"]} !important; font-family: 'Inter', sans-serif !important; font-size: 0.78rem !important; font-weight: 500 !important; letter-spacing: 0.07em !important; text-transform: uppercase !important; padding: 0.9rem 1.4rem !important; border-bottom: 2px solid transparent !important; margin-bottom: -1px !important; background: transparent !important; text-decoration: none !important; }}
+  .stTabs [data-baseweb="tab"]:link, .stTabs [data-baseweb="tab"]:visited, .stTabs [data-baseweb="tab"]:hover, .stTabs [data-baseweb="tab"]:active {{ color: {COLORS["text_mid"]} !important; -webkit-text-fill-color: {COLORS["text_mid"]} !important; text-decoration: none !important; }}
+  /* -webkit-text-fill-color must be repeated on every descendant (p, span, etc.)
+     because Streamlit's own tab styles set it directly, and it takes priority
+     over `color` on WebKit browsers — this is why labels were invisible. */
+  .stTabs [data-baseweb="tab"] * {{ color: {COLORS["text_mid"]} !important; -webkit-text-fill-color: {COLORS["text_mid"]} !important; }}
+  .stTabs [aria-selected="true"] {{ color: {COLORS["accent"]} !important; -webkit-text-fill-color: {COLORS["accent"]} !important; border-bottom: 2px solid {COLORS["accent"]} !important; }}
+  .stTabs [aria-selected="true"]:link, .stTabs [aria-selected="true"]:visited, .stTabs [aria-selected="true"]:hover, .stTabs [aria-selected="true"]:active {{ color: {COLORS["accent"]} !important; -webkit-text-fill-color: {COLORS["accent"]} !important; }}
+  .stTabs [aria-selected="true"] * {{ color: {COLORS["accent"]} !important; -webkit-text-fill-color: {COLORS["accent"]} !important; }}
   .stTabs [data-baseweb="tab-panel"] {{ padding: 1.5rem 2rem !important; background: {COLORS["bg"]}; }}
 
   [data-testid="metric-container"] {{ background: {COLORS["panel"]}; border: 1px solid {COLORS["border"]}; border-radius: 10px; padding: 1rem !important; }}
