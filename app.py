@@ -117,8 +117,14 @@ CSS = f"""
     -webkit-text-fill-color: {COLORS["text"]} !important;
     fill: {COLORS["text"]} !important;
   }}
-  [data-testid="stSidebar"] [data-baseweb="select"] svg {{ fill: {COLORS["text_mid"]} !important; }}
+  [data-testid="stSidebar"] [data-baseweb="select"] svg {{ display: none !important; }}
   [data-testid="stSidebar"] [data-baseweb="select"] div:has(> svg) {{ background: transparent !important; background-color: transparent !important; }}
+  [data-testid="stSidebar"] [data-testid="stSelectbox"] [data-baseweb="select"] {{ position: relative !important; }}
+  [data-testid="stSidebar"] [data-testid="stSelectbox"] [data-baseweb="select"]::after {{
+    content: "\25BE";
+    position: absolute; right: 14px; top: 50%; transform: translateY(-50%);
+    color: {COLORS["text_mid"]}; font-size: 13px; pointer-events: none;
+  }}
   div[data-baseweb="popover"],
   div[data-baseweb="popover"] div {{ background: {COLORS["panel2"]} !important; background-color: {COLORS["panel2"]} !important; color-scheme: light !important; }}
   div[data-baseweb="popover"] [data-baseweb="menu"] {{ background: {COLORS["panel2"]} !important; border: 1px solid {COLORS["border"]} !important; }}
@@ -133,9 +139,11 @@ CSS = f"""
   [data-testid="stSidebar"] .stNumberInput button svg {{ fill: {COLORS["text"]} !important; }}
 
   .stTabs [data-baseweb="tab-list"] {{ background: {COLORS["panel"]}; border-bottom: 1px solid {COLORS["border"]}; padding: 0 1.5rem; gap: 0; }}
-  .stTabs [data-baseweb="tab"] {{ color: {COLORS["text_mid"]} !important; font-family: 'Inter', sans-serif !important; font-size: 0.78rem !important; font-weight: 500 !important; letter-spacing: 0.07em !important; text-transform: uppercase !important; padding: 0.9rem 1.4rem !important; border-bottom: 2px solid transparent !important; margin-bottom: -1px !important; background: transparent !important; }}
+  .stTabs [data-baseweb="tab"] {{ color: {COLORS["text_mid"]} !important; font-family: 'Inter', sans-serif !important; font-size: 0.78rem !important; font-weight: 500 !important; letter-spacing: 0.07em !important; text-transform: uppercase !important; padding: 0.9rem 1.4rem !important; border-bottom: 2px solid transparent !important; margin-bottom: -1px !important; background: transparent !important; text-decoration: none !important; }}
+  .stTabs [data-baseweb="tab"]:link, .stTabs [data-baseweb="tab"]:visited, .stTabs [data-baseweb="tab"]:hover, .stTabs [data-baseweb="tab"]:active {{ color: {COLORS["text_mid"]} !important; text-decoration: none !important; }}
   .stTabs [data-baseweb="tab"] * {{ color: {COLORS["text_mid"]} !important; }}
   .stTabs [aria-selected="true"] {{ color: {COLORS["accent"]} !important; border-bottom: 2px solid {COLORS["accent"]} !important; }}
+  .stTabs [aria-selected="true"]:link, .stTabs [aria-selected="true"]:visited, .stTabs [aria-selected="true"]:hover, .stTabs [aria-selected="true"]:active {{ color: {COLORS["accent"]} !important; }}
   .stTabs [aria-selected="true"] * {{ color: {COLORS["accent"]} !important; }}
   .stTabs [data-baseweb="tab-panel"] {{ padding: 1.5rem 2rem !important; background: {COLORS["bg"]}; }}
 
@@ -456,9 +464,9 @@ def plot_rr(rr_ms):
     fig.update_layout(
         **_base_layout(height=260),
         title=dict(text="RR Interval Series", font=dict(family="Inter", size=12, color=COLORS["text_mid"])),
-        xaxis=dict(title="Beat #", color=COLORS["text_mid"], gridcolor=COLORS["border"],
+        xaxis=dict(title="Beat #", color=COLORS["text_mid"], gridcolor="rgba(91,117,104,0.25)",
                    tickfont=dict(family="JetBrains Mono", size=10)),
-        yaxis=dict(title="RR (ms)", color=COLORS["text_mid"], gridcolor=COLORS["border"],
+        yaxis=dict(title="RR (ms)", color=COLORS["text_mid"], gridcolor="rgba(91,117,104,0.25)",
                    tickfont=dict(family="JetBrains Mono", size=10)),
     )
     return fig
@@ -478,15 +486,15 @@ def plot_poincare(rr_ms, is_afib=False):
     ))
     fig.add_trace(go.Scatter(
         x=lim, y=lim, mode="lines",
-        line=dict(color=COLORS["border_light"], dash="dash", width=1), showlegend=False,
+        line=dict(color=COLORS["text_dim"], dash="dash", width=1.5), showlegend=False,
     ))
     fig.update_layout(
         **_base_layout(height=260),
         title=dict(text="Poincaré Plot", font=dict(family="Inter", size=12, color=COLORS["text_mid"])),
-        xaxis=dict(title="RRₙ (ms)", color=COLORS["text_mid"], gridcolor=COLORS["border"],
-                   range=lim, tickfont=dict(family="JetBrains Mono", size=10)),
-        yaxis=dict(title="RRₙ₊₁ (ms)", color=COLORS["text_mid"], gridcolor=COLORS["border"],
-                   range=lim, tickfont=dict(family="JetBrains Mono", size=10)),
+        xaxis=dict(title="RRₙ (ms)", color=COLORS["text_mid"], gridcolor="rgba(91,117,104,0.25)",
+                   range=lim, tickfont=dict(family="JetBrains Mono", size=10, color=COLORS["text_mid"])),
+        yaxis=dict(title="RRₙ₊₁ (ms)", color=COLORS["text_mid"], gridcolor="rgba(91,117,104,0.25)",
+                   range=lim, tickfont=dict(family="JetBrains Mono", size=10, color=COLORS["text_mid"])),
     )
     return fig
 
@@ -532,9 +540,9 @@ def plot_radar(features):
         polar=dict(
             bgcolor=COLORS["panel"],
             radialaxis=dict(visible=True, range=[0,1], color=COLORS["text_mid"],
-                            gridcolor=COLORS["border"],
+                            gridcolor="rgba(91,117,104,0.25)",
                             tickfont=dict(color=COLORS["text_mid"])),
-            angularaxis=dict(color=COLORS["text_mid"], gridcolor=COLORS["border"]),
+            angularaxis=dict(color=COLORS["text_mid"], gridcolor="rgba(91,117,104,0.25)"),
         ),
         paper_bgcolor=COLORS["panel"],
         title=dict(text="HRV Radar", font=dict(family="Inter", size=12, color=COLORS["text_mid"])),
@@ -569,7 +577,7 @@ def plot_feature_importance_xgb(model):
             **_base_layout(height=380),
             title=dict(text="XGBoost Feature Importance",
                        font=dict(family="Inter", size=12, color=COLORS["text_mid"])),
-            xaxis=dict(color=COLORS["text_mid"], gridcolor=COLORS["border"],
+            xaxis=dict(color=COLORS["text_mid"], gridcolor="rgba(91,117,104,0.25)",
                        tickfont=dict(family="JetBrains Mono", size=10)),
             yaxis=dict(color=COLORS["text"], tickfont=dict(family="Inter", size=11)),
             margin=dict(l=130, r=60, t=45, b=40),
@@ -595,7 +603,7 @@ def plot_feature_importance_cb(model):
             **_base_layout(height=380),
             title=dict(text="CatBoost Feature Importance",
                        font=dict(family="Inter", size=12, color=COLORS["text_mid"])),
-            xaxis=dict(color=COLORS["text_mid"], gridcolor=COLORS["border"],
+            xaxis=dict(color=COLORS["text_mid"], gridcolor="rgba(91,117,104,0.25)",
                        tickfont=dict(family="JetBrains Mono", size=10)),
             yaxis=dict(color=COLORS["text"], tickfont=dict(family="Inter", size=11)),
             margin=dict(l=130, r=60, t=45, b=40),
