@@ -157,28 +157,24 @@ CSS = f"""
   [data-testid="stSidebar"] .stNumberInput button {{ background: {COLORS["panel2"]} !important; border-color: {COLORS["border"]} !important; }}
   [data-testid="stSidebar"] .stNumberInput button svg {{ fill: {COLORS["text"]} !important; }}
 
-  .stTabs [data-baseweb="tab-list"] {{ background: transparent; border-bottom: 1px solid {COLORS["border"]}; padding: 0 1.5rem 0.6rem; gap: 8px; }}
+  .stTabs [data-baseweb="tab-list"] {{ background: transparent; border-bottom: 1px solid {COLORS["border"]}; padding: 0 1.5rem; gap: 0; }}
   .stTabs [data-baseweb="tab"] {{
     color: {COLORS["text"]} !important; -webkit-text-fill-color: {COLORS["text"]} !important;
     font-family: 'Inter', sans-serif !important; font-size: 0.78rem !important; font-weight: 600 !important;
-    letter-spacing: 0.04em !important; text-transform: none !important;
-    padding: 0.55rem 1.1rem !important; margin-bottom: 0 !important;
-    background: {COLORS["panel2"]} !important; border: 1px solid {COLORS["border"]} !important;
-    border-radius: 20px !important; text-decoration: none !important;
+    letter-spacing: 0.05em !important; text-transform: uppercase !important;
+    padding: 0.9rem 1.4rem !important; margin-bottom: -1px !important;
+    background: transparent !important; border: none !important;
+    border-bottom: 2px solid transparent !important; border-radius: 0 !important;
+    text-decoration: none !important;
   }}
   .stTabs [data-baseweb="tab"]:link, .stTabs [data-baseweb="tab"]:visited, .stTabs [data-baseweb="tab"]:hover, .stTabs [data-baseweb="tab"]:active {{ color: {COLORS["text"]} !important; -webkit-text-fill-color: {COLORS["text"]} !important; text-decoration: none !important; }}
-  /* -webkit-text-fill-color must be repeated on every descendant (p, span, etc.)
-     because Streamlit's own tab styles set it directly, and it takes priority
-     over `color` on WebKit browsers. A solid chip background (above) is the
-     real safety net: even if text color is ever overridden again, the chip
-     shape and border still make the tab legible and clearly clickable. */
   .stTabs [data-baseweb="tab"] * {{ color: {COLORS["text"]} !important; -webkit-text-fill-color: {COLORS["text"]} !important; }}
   .stTabs [aria-selected="true"] {{
-    background: {COLORS["accent"]} !important; border-color: {COLORS["accent"]} !important;
-    color: white !important; -webkit-text-fill-color: white !important;
+    background: transparent !important; border-bottom: 2px solid {COLORS["accent"]} !important;
+    color: {COLORS["accent"]} !important; -webkit-text-fill-color: {COLORS["accent"]} !important;
   }}
-  .stTabs [aria-selected="true"]:link, .stTabs [aria-selected="true"]:visited, .stTabs [aria-selected="true"]:hover, .stTabs [aria-selected="true"]:active {{ color: white !important; -webkit-text-fill-color: white !important; }}
-  .stTabs [aria-selected="true"] * {{ color: white !important; -webkit-text-fill-color: white !important; }}
+  .stTabs [aria-selected="true"]:link, .stTabs [aria-selected="true"]:visited, .stTabs [aria-selected="true"]:hover, .stTabs [aria-selected="true"]:active {{ color: {COLORS["accent"]} !important; -webkit-text-fill-color: {COLORS["accent"]} !important; }}
+  .stTabs [aria-selected="true"] * {{ color: {COLORS["accent"]} !important; -webkit-text-fill-color: {COLORS["accent"]} !important; }}
   .stTabs [data-baseweb="tab-panel"] {{ padding: 1.5rem 2rem !important; background: {COLORS["bg"]}; }}
 
   [data-testid="metric-container"] {{ background: {COLORS["panel"]}; border: 1px solid {COLORS["border"]}; border-radius: 10px; padding: 1rem !important; }}
@@ -474,13 +470,13 @@ def plot_ecg(signal, peaks, fs=FS, title="ECG Signal", is_afib=False):
         **_base_layout(height=300, plot_bgcolor=COLORS["ecg_bg"]),
         title=dict(text=title, font=dict(family="Inter", size=12, color=COLORS["text_mid"]), x=0.01),
         xaxis=dict(
-            title="Time (s)", color=COLORS["text_mid"],
+            title=dict(text="Time (s)", font=dict(color=COLORS["text_mid"])), color=COLORS["text_mid"],
             gridcolor=COLORS["ecg_grid_maj"], gridwidth=1, dtick=1, showgrid=True,
             minor=dict(dtick=0.08, gridcolor=COLORS["ecg_grid_min"], showgrid=True),
             tickfont=dict(family="JetBrains Mono", size=10, color=COLORS["text_mid"]),
         ),
         yaxis=dict(
-            title="Amplitude (norm.)", color=COLORS["text_mid"],
+            title=dict(text="Amplitude (norm.)", font=dict(color=COLORS["text_mid"])), color=COLORS["text_mid"],
             gridcolor=COLORS["ecg_grid_maj"], gridwidth=1, dtick=1, showgrid=True,
             minor=dict(dtick=0.1, gridcolor=COLORS["ecg_grid_min"], showgrid=True),
             tickfont=dict(family="JetBrains Mono", size=10, color=COLORS["text_mid"]),
@@ -539,9 +535,11 @@ def plot_poincare(rr_ms, is_afib=False):
     fig.update_layout(
         **_base_layout(height=260),
         title=dict(text="Poincaré Plot", font=dict(family="Inter", size=12, color=COLORS["text_mid"])),
-        xaxis=dict(title="RRₙ (ms)", color=COLORS["text_mid"], gridcolor="rgba(91,117,104,0.25)",
+        xaxis=dict(title=dict(text="RRₙ (ms)", font=dict(color=COLORS["text_mid"])),
+                   color=COLORS["text_mid"], gridcolor="rgba(91,117,104,0.25)",
                    range=lim, tickfont=dict(family="JetBrains Mono", size=10, color=COLORS["text_mid"])),
-        yaxis=dict(title="RRₙ₊₁ (ms)", color=COLORS["text_mid"], gridcolor="rgba(91,117,104,0.25)",
+        yaxis=dict(title=dict(text="RRₙ₊₁ (ms)", font=dict(color=COLORS["text_mid"])),
+                   color=COLORS["text_mid"], gridcolor="rgba(91,117,104,0.25)",
                    range=lim, tickfont=dict(family="JetBrains Mono", size=10, color=COLORS["text_mid"])),
     )
     return fig
