@@ -2,7 +2,7 @@
 app.py — AFib Detection Web App
 ================================
 Streamlit app for detecting Atrial Fibrillation from ECG signals.
-Restyled to match CardioSense aesthetic.
+Restyled to match AFib AI aesthetic.
 
 Models supported:
   - Random Forest (HRV features — loads models/rf.pkl)
@@ -53,7 +53,7 @@ except ImportError:
 # PAGE CONFIG
 # ═══════════════════════════════════════════════════════════════════════════
 st.set_page_config(
-    page_title="CardioSense",
+    page_title="AFib AI",
     page_icon="🫀",
     layout="wide",
     initial_sidebar_state="expanded",
@@ -427,7 +427,7 @@ def hrv_heuristic(features):
     return ("AFib" if prob >= threshold else "Normal"), prob, threshold, reasons
 
 # ═══════════════════════════════════════════════════════════════════════════
-# PLOTS  — all use CardioSense palette
+# PLOTS  — all use AFib AI palette
 # ═══════════════════════════════════════════════════════════════════════════
 
 def _base_layout(**kwargs):
@@ -660,7 +660,7 @@ def main():
         <div style='padding:1rem 0 0.8rem;'>
           <div style='font-size:1.8rem; margin-bottom:6px;'>🫀</div>
           <div style='font-family:"Sora",sans-serif; font-size:1.3rem; color:{COLORS["text"]};
-                      font-weight:700; line-height:1;'>CardioSense</div>
+                      font-weight:700; line-height:1;'>AFib AI</div>
           <div style='font-family:"JetBrains Mono",monospace; font-size:0.55rem;
                       color:{COLORS["text_dim"]}; letter-spacing:0.12em; margin-top:4px;'>
             HRV ANALYSIS v1.0
@@ -745,7 +745,7 @@ def main():
         <span style='font-size:1.6rem;'>🫀</span>
         <div>
           <span style='font-family:"Sora",sans-serif; font-size:1.25rem; color:{COLORS["text"]}; font-weight:700;'>
-            CardioSense
+            AFib AI
           </span>
         </div>
       </div>
