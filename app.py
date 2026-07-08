@@ -157,31 +157,36 @@ CSS = f"""
   [data-testid="stSidebar"] .stNumberInput button {{ background: {COLORS["panel2"]} !important; border-color: {COLORS["border"]} !important; }}
   [data-testid="stSidebar"] .stNumberInput button svg {{ fill: {COLORS["text"]} !important; }}
 
-  .stTabs [data-baseweb="tab-list"] {{ background: transparent; border-bottom: 1px solid {COLORS["border"]}; padding: 0 1.5rem; gap: 0; }}
+  .stTabs [data-baseweb="tab-list"] {{
+    background: {COLORS["text"]} !important; border-bottom: none !important;
+    border-radius: 10px !important; padding: 0.4rem 1rem !important; gap: 4px;
+  }}
   .stTabs [data-baseweb="tab"] {{
-    color: {COLORS["text"]} !important; -webkit-text-fill-color: {COLORS["text"]} !important;
+    color: {COLORS["white"]} !important; -webkit-text-fill-color: {COLORS["white"]} !important;
     font-family: 'Inter', sans-serif !important; font-size: 0.78rem !important; font-weight: 600 !important;
     letter-spacing: 0.05em !important; text-transform: uppercase !important;
-    padding: 0.9rem 1.4rem !important; margin-bottom: -1px !important;
+    padding: 0.7rem 1.2rem !important; margin-bottom: 0 !important;
     background: transparent !important; border: none !important;
-    border-bottom: 2px solid transparent !important; border-radius: 0 !important;
+    border-radius: 8px !important;
     text-decoration: none !important;
+    opacity: 0.68;
   }}
-  .stTabs [data-baseweb="tab"]:link, .stTabs [data-baseweb="tab"]:visited, .stTabs [data-baseweb="tab"]:hover, .stTabs [data-baseweb="tab"]:active {{ color: {COLORS["text"]} !important; -webkit-text-fill-color: {COLORS["text"]} !important; text-decoration: none !important; }}
-  .stTabs [data-baseweb="tab"] * {{ color: {COLORS["text"]} !important; -webkit-text-fill-color: {COLORS["text"]} !important; }}
+  .stTabs [data-baseweb="tab"]:link, .stTabs [data-baseweb="tab"]:visited, .stTabs [data-baseweb="tab"]:hover, .stTabs [data-baseweb="tab"]:active {{ color: {COLORS["white"]} !important; -webkit-text-fill-color: {COLORS["white"]} !important; text-decoration: none !important; }}
+  .stTabs [data-baseweb="tab"] * {{ color: {COLORS["white"]} !important; -webkit-text-fill-color: {COLORS["white"]} !important; }}
   /* Explicit [aria-selected="false"] qualifier — matches the specificity of
      whatever internal Streamlit rule was winning the cascade fight and
      re-graying inactive tab text despite the !important rules above. */
   .stTabs [data-baseweb="tab"][aria-selected="false"],
   .stTabs [data-baseweb="tab"][aria-selected="false"] * {{
-    color: {COLORS["text"]} !important; -webkit-text-fill-color: {COLORS["text"]} !important;
+    color: {COLORS["white"]} !important; -webkit-text-fill-color: {COLORS["white"]} !important;
   }}
   .stTabs [aria-selected="true"] {{
-    background: transparent !important; border-bottom: 2px solid {COLORS["accent"]} !important;
-    color: {COLORS["accent"]} !important; -webkit-text-fill-color: {COLORS["accent"]} !important;
+    background: rgba(255,255,255,0.14) !important;
+    color: {COLORS["white"]} !important; -webkit-text-fill-color: {COLORS["white"]} !important;
+    opacity: 1;
   }}
-  .stTabs [aria-selected="true"]:link, .stTabs [aria-selected="true"]:visited, .stTabs [aria-selected="true"]:hover, .stTabs [aria-selected="true"]:active {{ color: {COLORS["accent"]} !important; -webkit-text-fill-color: {COLORS["accent"]} !important; }}
-  .stTabs [aria-selected="true"] * {{ color: {COLORS["accent"]} !important; -webkit-text-fill-color: {COLORS["accent"]} !important; }}
+  .stTabs [aria-selected="true"]:link, .stTabs [aria-selected="true"]:visited, .stTabs [aria-selected="true"]:hover, .stTabs [aria-selected="true"]:active {{ color: {COLORS["white"]} !important; -webkit-text-fill-color: {COLORS["white"]} !important; }}
+  .stTabs [aria-selected="true"] * {{ color: {COLORS["white"]} !important; -webkit-text-fill-color: {COLORS["white"]} !important; }}
   .stTabs [data-baseweb="tab-panel"] {{ padding: 1.5rem 2rem !important; background: {COLORS["bg"]}; }}
 
   [data-testid="metric-container"] {{ background: {COLORS["panel"]}; border: 1px solid {COLORS["border"]}; border-radius: 10px; padding: 1rem !important; }}
