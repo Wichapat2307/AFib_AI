@@ -226,6 +226,12 @@ st.markdown(CSS, unsafe_allow_html=True)
 FS     = 128
 WINDOW = 3840   # 30 s × 128 Hz
 
+# Sliding-window analysis: a WINDOW_SEC-second window is scored at a time,
+# advancing STRIDE_SEC seconds between windows (so consecutive windows overlap
+# by WINDOW_SEC - STRIDE_SEC seconds).
+WINDOW_SEC = 10
+STRIDE_SEC = 1
+
 APP_DIR = Path(__file__).parent.resolve()
 
 MODEL_PATHS = {
@@ -350,6 +356,34 @@ def extract_hrv(signal, fs=FS):
         lf_hf,lf_norm,hf_norm,dom_freq,float(len(peaks)),
     ], dtype=np.float32)
 
+@st.cache_data(show_spinner=False)
+def sliding_windows(signal, fs, window_sec=WINDOW_SEC, stride_sec=STRIDE_SEC):
+    """
+    Splits `signal` into overlapping analysis windows: window_sec seconds
+    long, advancing stride_sec seconds each step (so consecutive windows
+    overlap by window_sec - stride_sec seconds). If the signal is shorter
+    than one full window, the whole signal is returned as a single window.
+    """
+    win    = int(window_sec * fs)
+    stride = max(1, int(stride_sec * fs))
+    n      = len(signal)
+
+    if n < win:
+        return [{
+            "start_idx": 0, "end_idx": n,
+            "start_sec": 0.0, "end_sec": round(n / fs, 1),
+        }]
+
+    windows = []
+    s = 0
+    while s + win <= n:
+        windows.append({
+            "start_idx": s, "end_idx": s + win,
+            "start_sec": round(s / fs, 1), "end_sec": round((s + win) / fs, 1),
+        })
+        s += stride
+    return windows
+
 # ═══════════════════════════════════════════════════════════════════════════
 # MODEL LOADERS
 # ═══════════════════════════════════════════════════════════════════════════
@@ -446,7 +480,7 @@ def _base_layout(**kwargs):
     base.update(kwargs)
     return base
 
-def plot_ecg(signal, peaks, fs=FS, title="ECG Signal", is_afib=False):
+def plot_ecg(signal, peaks, fs=FS, title="ECG Signal", is_afib=False, window_range=None):
     max_pts = 1500
     step    = max(1, len(signal) // max_pts)
     disp    = signal[::step]
@@ -454,6 +488,14 @@ def plot_ecg(signal, peaks, fs=FS, title="ECG Signal", is_afib=False):
     tc      = COLORS["ecg_afib"] if is_afib else COLORS["ecg_normal"]
 
     fig = go.Figure()
+
+    if window_range is not None:
+        w_start, w_end = window_range
+        hl = "rgba(220,38,38,0.10)" if is_afib else "rgba(22,163,74,0.10)"
+        fig.add_vrect(x0=w_start, x1=w_end, fillcolor=hl, layer="below", line_width=0)
+        for x in (w_start, w_end):
+            fig.add_vline(x=x, line=dict(color=tc, width=1.2, dash="dot"))
+
     fig.add_trace(go.Scatter(
         x=t, y=disp, mode="lines",
         line=dict(color=tc, width=1.4), name="ECG",
@@ -879,14 +921,49 @@ def main():
 </div>
 """, unsafe_allow_html=True)
 
-    # ── PREPROCESS + FEATURES ────────────────────────────────────────────
+    # ── PREPROCESS + SLIDING WINDOWS ─────────────────────────────────────
     if signal is not None and len(signal) > 0:
         with st.spinner("Processing signal…"):
-            proc     = preprocess(signal, fs=fs_input)
-            peaks    = detect_rpeaks(signal, fs=fs_input)
+            proc_full  = preprocess(signal, fs=fs_input)
+            peaks_full = detect_rpeaks(signal, fs=fs_input)
+            windows    = sliding_windows(signal, fs_input)
+
+        n_win = len(windows)
+
+        st.markdown(f'<div class="cs-label">Analysis Window '
+                     f'({WINDOW_SEC}s window · {STRIDE_SEC}s stride)</div>',
+                     unsafe_allow_html=True)
+        if n_win > 1:
+            win_col, info_col = st.columns([5, 1])
+            with win_col:
+                win_idx = st.slider(
+                    "Analysis window", 0, n_win - 1,
+                    st.session_state.get("win_idx", 0),
+                    key="win_idx", label_visibility="collapsed",
+                )
+            with info_col:
+                w = windows[win_idx]
+                st.markdown(
+                    f"<div style='text-align:right; padding-top:6px;'>"
+                    f"<span style='font-family:JetBrains Mono; font-size:1.1rem; "
+                    f"font-weight:700; color:{COLORS['text']};'>{win_idx+1} / {n_win}</span><br>"
+                    f"<span style='font-size:0.72rem; color:{COLORS['text_dim']};'>"
+                    f"{w['start_sec']:.1f}s → {w['end_sec']:.1f}s</span></div>",
+                    unsafe_allow_html=True,
+                )
+        else:
+            win_idx = 0
+            st.caption(f"Signal is shorter than {WINDOW_SEC}s — using the whole "
+                       f"{windows[0]['end_sec']:.1f}s clip as a single window.")
+
+        w   = windows[win_idx]
+        seg = signal[w["start_idx"]:w["end_idx"]]
+
+        with st.spinner("Scoring window…"):
+            peaks    = detect_rpeaks(seg, fs=fs_input)
             rr_ms    = np.diff(peaks) / fs_input * 1000
             rr_ms    = rr_ms[(rr_ms > 250) & (rr_ms < 2000)]
-            features = extract_hrv(signal, fs=fs_input)
+            features = extract_hrv(seg, fs=fs_input)
             feat     = dict(zip(FEATURE_NAMES, features))
 
         # ── RUN MODEL ────────────────────────────────────────────────────
@@ -1076,12 +1153,13 @@ def main():
     </div>
     """, unsafe_allow_html=True)
 
-    # ── ECG (full width) ─────────────────────────────────────────────────
+    # ── ECG (full width, with selected window highlighted) ──────────────
     view_s = len(signal) / fs_input
     st.plotly_chart(
-        plot_ecg(proc, peaks, fs=fs_input,
+        plot_ecg(proc_full, peaks_full, fs=fs_input,
                  title=f"ECG  ·  Full {view_s:.0f}s  ·  {signal_label}",
-                 is_afib=is_afib),
+                 is_afib=is_afib,
+                 window_range=(w["start_sec"], w["end_sec"])),
         use_container_width=True,
     )
 
