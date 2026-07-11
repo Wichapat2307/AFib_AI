@@ -1048,25 +1048,43 @@ def main():
 
     st.markdown("<div style='height:6px'></div>", unsafe_allow_html=True)
 
-    # ── ECG + GAUGE ──────────────────────────────────────────────────────
-    ecg_col, gauge_col = st.columns([3, 1])
+    # ── PROBABILITY BAR ──────────────────────────────────────────────────
+    bar_color = COLORS["success"] if prob < 0.35 else COLORS["warn"] if prob < 0.65 else COLORS["danger"]
+    fill_pct  = max(0.0, min(1.0, prob)) * 100
+    thr_pct   = max(0.0, min(1.0, threshold)) * 100
+    st.markdown(f"""
+    <div class="cs-card" style="padding: 1rem 1.5rem;">
+      <div style="display:flex; justify-content:space-between; align-items:baseline; margin-bottom:0.6rem;">
+        <div class="cs-label" style="margin-bottom:0; padding-bottom:0; border-bottom:none;">AFib Probability</div>
+        <div style="font-family:'JetBrains Mono',monospace; font-size:1.1rem; font-weight:700; color:{bar_color};">
+          {prob*100:.1f}% &nbsp;·&nbsp; {label.upper()}
+        </div>
+      </div>
+      <div style="position:relative; height:16px; background:{COLORS['panel2']}; border:1px solid {COLORS['border']}; border-radius:8px; overflow:hidden;">
+        <div style="position:absolute; left:0; top:0; height:100%; width:{fill_pct:.2f}%;
+                    background:linear-gradient(90deg, {COLORS['accent2']}, {bar_color}); border-radius:8px;
+                    transition:width 0.3s ease;"></div>
+        <div style="position:absolute; left:{thr_pct:.2f}%; top:-3px; width:2px; height:22px;
+                    background:{COLORS['text']}; opacity:0.55;"></div>
+      </div>
+      <div style="display:flex; justify-content:space-between; margin-top:6px;
+                  font-family:'JetBrains Mono',monospace; font-size:0.7rem; color:{COLORS['text_dim']};">
+        <span>0%</span>
+        <span>Decision threshold: {threshold*100:.0f}%</span>
+        <span>100%</span>
+      </div>
+    </div>
+    """, unsafe_allow_html=True)
+
+    # ── ECG (full width) ─────────────────────────────────────────────────
     view_s = len(signal) / fs_input
-    with ecg_col:
-        st.plotly_chart(
-            plot_ecg(proc, peaks, fs=fs_input,
-                     title=f"ECG  ·  Full {view_s:.0f}s  ·  {signal_label}",
-                     is_afib=is_afib),
-            use_container_width=True,
-        )
-    with gauge_col:
-        st.markdown("<div style='height:6px'></div>", unsafe_allow_html=True)
-        st.plotly_chart(plot_gauge(prob), use_container_width=True)
-        lbl_c = COLORS["danger"] if is_afib else COLORS["success"]
-        st.markdown(
-            f"<div style='text-align:center; font-family:Inter; font-size:0.72rem;"
-            f" color:{lbl_c}; font-weight:700; margin-top:-10px;'>{label.upper()}</div>",
-            unsafe_allow_html=True,
-        )
+    st.plotly_chart(
+        plot_ecg(proc, peaks, fs=fs_input,
+                 title=f"ECG  ·  Full {view_s:.0f}s  ·  {signal_label}",
+                 is_afib=is_afib),
+        use_container_width=True,
+    )
+
 
     st.markdown("---")
 
