@@ -19,7 +19,7 @@ import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
 from pathlib import Path
-import io, pickle, time
+import io, pickle, time, json, urllib.request, urllib.error
 
 try:
     import joblib
@@ -94,6 +94,18 @@ CSS = f"""
   html, body, :root {{ color-scheme: light !important; }}
   input, select, button {{ color-scheme: light !important; }}
   input[type="radio"], input[type="checkbox"] {{ accent-color: {COLORS["accent"]} !important; color-scheme: light !important; }}
+
+  /* Streamlit/BaseWeb radios & checkboxes are custom-drawn (not native inputs),
+     so accent-color above never reaches them — this is the "red dot leak".
+     Override every layer of the custom control explicitly, scoped to the whole
+     app (not just the sidebar) so it can't leak on any page. */
+  [data-baseweb="radio"] div[aria-checked="true"] {{ border-color: {COLORS["accent"]} !important; }}
+  [data-baseweb="radio"] div[aria-checked="true"] > div {{ background: {COLORS["accent"]} !important; border-color: {COLORS["accent"]} !important; }}
+  [data-baseweb="radio"] svg {{ fill: {COLORS["accent"]} !important; color: {COLORS["accent"]} !important; }}
+  [role="radiogroup"] div[aria-checked="true"] {{ border-color: {COLORS["accent"]} !important; }}
+  [role="radiogroup"] div[aria-checked="true"] > div {{ background: {COLORS["accent"]} !important; }}
+  [data-baseweb="checkbox"] div[aria-checked="true"] {{ background: {COLORS["accent"]} !important; border-color: {COLORS["accent"]} !important; }}
+  [data-baseweb="checkbox"] svg {{ fill: {COLORS["white"]} !important; }}
   .stApp {{ background: {COLORS["bg"]}; font-family: 'Inter', sans-serif; color: {COLORS["text"]}; color-scheme: light !important; }}
   .main .block-container {{ padding: 1.5rem 2rem !important; max-width: 100% !important; }}
 
@@ -623,7 +635,7 @@ def main():
 
         input_mode = st.radio(
             "Input Source",
-            ["Demo ECG", "Upload .npy file", "Upload .csv file"],
+            ["Demo ECG", "Upload .npy file", "Upload .csv file", "ESP32 (WiFi)"],
             label_visibility="collapsed",
         )
 
@@ -631,6 +643,20 @@ def main():
             demo_choice = st.selectbox(
                 "Demo ECG",
                 list(DEMO_FILES.keys())
+            )
+
+        if input_mode == "ESP32 (WiFi)":
+            st.markdown(f'<div class="cs-label">ESP32 Connection</div>', unsafe_allow_html=True)
+            esp32_ip = st.text_input("ESP32 IP address", value="192.168.4.1",
+                                      placeholder="e.g. 192.168.1.42")
+            esp32_port = st.number_input("Port", min_value=1, max_value=65535, value=80, step=1)
+            esp32_path = st.text_input("Endpoint path", value="/ecg",
+                                        help="Path on the ESP32 that returns the ECG samples, "
+                                             "as JSON array or comma-separated values.")
+            fetch_clicked = st.button("🔄  Fetch from ESP32", use_container_width=True)
+            st.caption(
+                "Expects the ESP32 to serve raw ECG samples over HTTP — either a JSON "
+                "array of numbers, or a comma/newline-separated list of values."
             )
 
         st.divider()
@@ -721,6 +747,38 @@ def main():
             df = pd.read_csv(uploaded_file)
             signal = df.iloc[:, 0].values
             signal_label = uploaded_file.name
+
+    elif input_mode == "ESP32 (WiFi)":
+        if fetch_clicked:
+            url = f"http://{esp32_ip}:{int(esp32_port)}{esp32_path}"
+            try:
+                with urllib.request.urlopen(url, timeout=5) as resp:
+                    raw = resp.read().decode("utf-8", errors="replace")
+                try:
+                    parsed = json.loads(raw)
+                    values = np.array(parsed, dtype=np.float32).flatten()
+                except (json.JSONDecodeError, TypeError, ValueError):
+                    values = np.array(
+                        [float(v) for v in raw.replace("\n", ",").split(",") if v.strip() != ""],
+                        dtype=np.float32,
+                    )
+                if len(values) == 0:
+                    st.warning(f"ESP32 at `{url}` responded but no samples were parsed.")
+                else:
+                    st.session_state["esp32_signal"] = values
+                    st.session_state["esp32_label"] = f"ESP32 @ {esp32_ip}{esp32_path}"
+                    st.success(f"Fetched {len(values)} samples from {url}")
+            except urllib.error.URLError as e:
+                reason = getattr(e, "reason", e)
+                st.error(f"⚠️ Could not reach ESP32 at `{url}`: {reason}")
+            except Exception as e:
+                st.error(f"⚠️ Failed to parse data from ESP32: {e}")
+
+        if "esp32_signal" in st.session_state:
+            signal = st.session_state["esp32_signal"]
+            signal_label = st.session_state["esp32_label"]
+        else:
+            st.info("Enter the ESP32's IP address and click **Fetch from ESP32** to load live samples.")
 
     if signal is not None:
         total_seconds = len(signal) / fs_input
@@ -923,12 +981,12 @@ def main():
     st.markdown("<div style='height:6px'></div>", unsafe_allow_html=True)
 
     ecg_col, gauge_col = st.columns([3, 1])
-    view_s = min(15, len(signal)/fs_input)
-    n_view = int(view_s * fs_input)
+    view_s = len(signal) / fs_input
+    n_view = len(signal)
     with ecg_col:
         st.plotly_chart(
             plot_ecg(proc[:n_view], peaks[peaks < n_view], fs=fs_input,
-                     title=f"ECG  ·  First {view_s:.0f}s  ·  {signal_label}",
+                     title=f"ECG  ·  Full {view_s:.0f}s  ·  {signal_label}",
                      is_afib=is_afib),
             use_container_width=True,
         )
