@@ -919,28 +919,17 @@ def main():
         # Every prediction, metric, and plot below reflects only the
         # samples inside this window — there is no separate "whole
         # signal" prediction.
+        #
+        # The slider widget itself is rendered further down the page
+        # (right under the ECG plot). We read its current value from
+        # session_state here so the rest of the page — including the
+        # ECG plot above the slider — can react to it immediately.
         # ─────────────────────────────────────────────────────────────────
         window_len_s = min(SLIDE_WIN_SEC, view_s)
         max_start = max(0.0, view_s - window_len_s)
 
-        if "sw_pos" not in st.session_state:
-            st.session_state.sw_pos = 0.0
-        st.session_state.sw_pos = min(st.session_state.sw_pos, max_start)
-
-        st.markdown(f'<div class="cs-label">Analysis Window · {window_len_s:.0f}s wide</div>', unsafe_allow_html=True)
-        if max_start > 0:
-            sw_pos = st.slider(
-                "Scroll window across signal (s)", 0.0, float(max_start),
-                value=float(st.session_state.sw_pos), step=SLIDE_STEP_SEC,
-                key="sw_slider",
-                help="Drag to scan the recording — everything below reflects only "
-                     "the highlighted window.",
-                label_visibility="collapsed",
-            )
-        else:
-            sw_pos = 0.0
-            st.caption("Signal is shorter than the analysis window — using the full segment.")
-        st.session_state.sw_pos = sw_pos
+        sw_pos = float(st.session_state.get("sw_slider", 0.0))
+        sw_pos = min(sw_pos, max_start)
 
         start_sample = int(round(sw_pos * fs_input))
         end_sample   = start_sample + int(round(window_len_s * fs_input))
@@ -1064,6 +1053,20 @@ def main():
                  window_color=(COLORS["danger"] if is_afib else COLORS["accent"])),
         use_container_width=True,
     )
+
+    # ── Analysis window scrub bar — sits right under the ECG plot ─────────
+    st.markdown(f'<div class="cs-label">Analysis Window · {window_len_s:.0f}s wide</div>', unsafe_allow_html=True)
+    if max_start > 0:
+        st.slider(
+            "Scroll window across signal (s)", 0.0, float(max_start),
+            value=sw_pos, step=SLIDE_STEP_SEC,
+            key="sw_slider",
+            help="Drag to scan the recording — everything above reflects only "
+                 "the highlighted window.",
+            label_visibility="collapsed",
+        )
+    else:
+        st.caption("Signal is shorter than the analysis window — using the full segment.")
 
     st.markdown("---")
 
