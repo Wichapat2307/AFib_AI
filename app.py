@@ -2,7 +2,7 @@
 app.py — AFib Detection Web App
 ================================
 Streamlit app for detecting Atrial Fibrillation from ECG signals.
-Restyled to match CardioSense aesthetic.
+Restyled to match AFib AI aesthetic.
 
 Models supported:
   - Random Forest (HRV features — loads models/rf.pkl)
@@ -49,11 +49,17 @@ try:
 except ImportError:
     SKLEARN_AVAILABLE = False
 
+try:
+    import requests
+    REQUESTS_AVAILABLE = True
+except ImportError:
+    REQUESTS_AVAILABLE = False
+
 # ═══════════════════════════════════════════════════════════════════════════
 # PAGE CONFIG
 # ═══════════════════════════════════════════════════════════════════════════
 st.set_page_config(
-    page_title="CardioSense",
+    page_title="AFib AI",
     page_icon="🫀",
     layout="wide",
     initial_sidebar_state="expanded",
@@ -91,10 +97,7 @@ CSS = f"""
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&family=Sora:wght@600;700&display=swap');
   * {{ box-sizing: border-box; }}
-  html, body, :root {{ color-scheme: light !important; }}
-  input, select, button {{ color-scheme: light !important; }}
-  input[type="radio"], input[type="checkbox"] {{ accent-color: {COLORS["accent"]} !important; color-scheme: light !important; }}
-  .stApp {{ background: {COLORS["bg"]}; font-family: 'Inter', sans-serif; color: {COLORS["text"]}; color-scheme: light !important; }}
+  .stApp {{ background: {COLORS["bg"]}; font-family: 'Inter', sans-serif; color: {COLORS["text"]}; }}
   .main .block-container {{ padding: 1.5rem 2rem !important; max-width: 100% !important; }}
 
   [data-testid="stSidebar"] {{ background: {COLORS["panel"]} !important; border-right: 1px solid {COLORS["border"]} !important; }}
@@ -103,40 +106,67 @@ CSS = f"""
   [data-testid="stSidebar"] .stRadio label span {{ font-size: 0.83rem !important; color: {COLORS["text_mid"]} !important; }}
   [data-testid="stSidebar"] .stSelectbox label {{ font-size: 0.75rem !important; color: {COLORS["text_dim"]} !important; text-transform: uppercase !important; letter-spacing: 0.08em !important; }}
   [data-testid="stSidebar"] [data-testid="stSelectbox"],
-  [data-testid="stSidebar"] [data-testid="stSelectbox"] div,
-  [data-testid="stSidebar"] [data-baseweb="select"],
-  [data-testid="stSidebar"] [data-baseweb="select"] div,
-  [data-testid="stSidebar"] [data-baseweb="select"] > div,
-  [data-testid="stSidebar"] [data-baseweb="select"] > div > div {{
+  [data-testid="stSidebar"] [data-baseweb="select"] {{
     background: {COLORS["panel2"]} !important;
     background-color: {COLORS["panel2"]} !important;
+    background-image: none !important;
     border-color: {COLORS["border"]} !important;
     box-shadow: none !important;
     color-scheme: light !important;
   }}
   [data-testid="stSidebar"] [data-testid="stSelectbox"] *,
   [data-testid="stSidebar"] [data-baseweb="select"] * {{
+    background: {COLORS["panel2"]} !important;
+    background-color: {COLORS["panel2"]} !important;
+    background-image: none !important;
     color: {COLORS["text"]} !important;
     -webkit-text-fill-color: {COLORS["text"]} !important;
     fill: {COLORS["text"]} !important;
+    border-radius: 8px !important;
   }}
   [data-testid="stSidebar"] [data-baseweb="select"] svg {{ display: none !important; width: 0 !important; height: 0 !important; }}
-  [data-testid="stSidebar"] [data-baseweb="select"] div:has(> svg) {{ background: transparent !important; background-color: transparent !important; }}
-  [data-testid="stSidebar"] [data-baseweb="select"] [class*="Indicator"],
-  [data-testid="stSidebar"] [data-baseweb="select"] > div > div:last-child {{
-    background: transparent !important; background-color: transparent !important;
-    width: auto !important; min-width: 0 !important;
+  [data-testid="stSidebar"] [data-baseweb="select"] *:has(> svg) {{ background: transparent !important; background-color: transparent !important; background-image: none !important; }}
+  [data-testid="stSidebar"] [data-baseweb="select"] *::before,
+  [data-testid="stSidebar"] [data-baseweb="select"] *::after {{
+    content: none !important;
+    background: transparent !important;
+    background-color: transparent !important;
+    background-image: none !important;
+    display: none !important;
+  }}
+  [data-testid="stSidebar"] [data-testid="stSelectbox"] {{
+    overflow: hidden !important;
+    border-radius: 8px !important;
   }}
   [data-testid="stSidebar"] [data-testid="stSelectbox"] [data-baseweb="select"] {{
-    position: relative !important; overflow: hidden !important; border-radius: 8px !important;
+    position: relative !important;
+    overflow: hidden !important;
+    border-radius: 8px !important;
+    border: 1px solid {COLORS["border"]} !important;
+    isolation: isolate !important;
+    clip-path: inset(0 round 8px) !important;
+  }}
+  [data-testid="stSidebar"] [data-testid="stSelectbox"] [data-baseweb="select"] > div {{
+    overflow: hidden !important;
+    box-shadow: none !important;
+    border: none !important;
+    border-radius: 8px !important;
+    clip-path: inset(0 round 8px) !important;
+  }}
+  [data-testid="stSidebar"] [data-testid="stSelectbox"] [data-baseweb="select"] > div > *:last-child {{
+    overflow: hidden !important;
+    border-radius: 8px !important;
+    width: 0 !important;
+    max-width: 0 !important;
+    min-width: 0 !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    display: none !important;
   }}
   [data-testid="stSidebar"] [data-testid="stSelectbox"] [data-baseweb="select"]::after {{
-    content: "";
-    position: absolute; right: 16px; top: 50%; transform: translateY(-50%);
-    width: 0; height: 0; pointer-events: none;
-    border-left: 4.5px solid transparent;
-    border-right: 4.5px solid transparent;
-    border-top: 5.5px solid {COLORS["text_mid"]};
+    content: "\25BE";
+    position: absolute; right: 14px; top: 50%; transform: translateY(-50%);
+    color: {COLORS["text_mid"]}; font-size: 13px; pointer-events: none; z-index: 5;
   }}
   div[data-baseweb="popover"],
   div[data-baseweb="popover"] div {{ background: {COLORS["panel2"]} !important; background-color: {COLORS["panel2"]} !important; color-scheme: light !important; }}
@@ -151,36 +181,13 @@ CSS = f"""
   [data-testid="stSidebar"] .stNumberInput button {{ background: {COLORS["panel2"]} !important; border-color: {COLORS["border"]} !important; }}
   [data-testid="stSidebar"] .stNumberInput button svg {{ fill: {COLORS["text"]} !important; }}
 
-  .stTabs [data-baseweb="tab-list"] {{
-    background: {COLORS["text"]} !important; border-bottom: none !important;
-    border-radius: 10px !important; padding: 0.4rem 1rem !important; gap: 4px;
-  }}
-  .stTabs [data-baseweb="tab-highlight"] {{ background: transparent !important; }}
-  .stTabs [data-baseweb="tab-border"] {{ background: transparent !important; }}
-  .stTabs [data-baseweb="tab"] {{
-    color: {COLORS["white"]} !important; -webkit-text-fill-color: {COLORS["white"]} !important;
-    font-family: 'Inter', sans-serif !important; font-size: 0.78rem !important; font-weight: 600 !important;
-    letter-spacing: 0.05em !important; text-transform: uppercase !important;
-    padding: 0.7rem 1.2rem !important; margin-bottom: 0 !important;
-    background: transparent !important; border: none !important;
-    border-radius: 8px !important;
-    text-decoration: none !important;
-    opacity: 0.68;
-  }}
-  .stTabs [data-baseweb="tab"]:link, .stTabs [data-baseweb="tab"]:visited, .stTabs [data-baseweb="tab"]:hover, .stTabs [data-baseweb="tab"]:active {{ color: {COLORS["white"]} !important; -webkit-text-fill-color: {COLORS["white"]} !important; text-decoration: none !important; }}
-  .stTabs [data-baseweb="tab"] * {{ color: {COLORS["white"]} !important; -webkit-text-fill-color: {COLORS["white"]} !important; }}
-  .stTabs [data-baseweb="tab"][aria-selected="false"],
-  .stTabs [data-baseweb="tab"][aria-selected="false"] * {{
-    color: {COLORS["white"]} !important; -webkit-text-fill-color: {COLORS["white"]} !important;
-  }}
-  .stTabs [aria-selected="true"] {{
-    background: {COLORS["accent"]} !important;
-    color: {COLORS["white"]} !important; -webkit-text-fill-color: {COLORS["white"]} !important;
-    border-bottom: none !important; box-shadow: none !important;
-    opacity: 1;
-  }}
-  .stTabs [aria-selected="true"]:link, .stTabs [aria-selected="true"]:visited, .stTabs [aria-selected="true"]:hover, .stTabs [aria-selected="true"]:active {{ color: {COLORS["white"]} !important; -webkit-text-fill-color: {COLORS["white"]} !important; }}
-  .stTabs [aria-selected="true"] * {{ color: {COLORS["white"]} !important; -webkit-text-fill-color: {COLORS["white"]} !important; }}
+  .stTabs [data-baseweb="tab-list"] {{ background: {COLORS["panel"]}; border-bottom: 1px solid {COLORS["border"]}; padding: 0 1.5rem; gap: 0; }}
+  .stTabs [data-baseweb="tab"] {{ color: {COLORS["text_mid"]} !important; font-family: 'Inter', sans-serif !important; font-size: 0.78rem !important; font-weight: 500 !important; letter-spacing: 0.07em !important; text-transform: uppercase !important; padding: 0.9rem 1.4rem !important; border-bottom: 2px solid transparent !important; margin-bottom: -1px !important; background: transparent !important; text-decoration: none !important; }}
+  .stTabs [data-baseweb="tab"]:link, .stTabs [data-baseweb="tab"]:visited, .stTabs [data-baseweb="tab"]:hover, .stTabs [data-baseweb="tab"]:active {{ color: {COLORS["text_mid"]} !important; text-decoration: none !important; }}
+  .stTabs [data-baseweb="tab"] * {{ color: {COLORS["text_mid"]} !important; }}
+  .stTabs [aria-selected="true"] {{ color: {COLORS["accent"]} !important; border-bottom: 2px solid {COLORS["accent"]} !important; }}
+  .stTabs [aria-selected="true"]:link, .stTabs [aria-selected="true"]:visited, .stTabs [aria-selected="true"]:hover, .stTabs [aria-selected="true"]:active {{ color: {COLORS["accent"]} !important; }}
+  .stTabs [aria-selected="true"] * {{ color: {COLORS["accent"]} !important; }}
   .stTabs [data-baseweb="tab-panel"] {{ padding: 1.5rem 2rem !important; background: {COLORS["bg"]}; }}
 
   [data-testid="metric-container"] {{ background: {COLORS["panel"]}; border: 1px solid {COLORS["border"]}; border-radius: 10px; padding: 1rem !important; }}
@@ -208,16 +215,6 @@ CSS = f"""
   ::-webkit-scrollbar-track {{ background: {COLORS["bg"]}; }}
   ::-webkit-scrollbar-thumb {{ background: {COLORS["border_light"]}; border-radius: 3px; }}
   code {{ background: {COLORS["panel2"]} !important; color: {COLORS["accent2"]} !important; border: 1px solid {COLORS["border"]} !important; border-radius: 4px !important; padding: 1px 5px !important; }}
-
-  .cs-table-wrap {{ max-height: 420px; overflow-y: auto; border: 1px solid {COLORS["border"]}; border-radius: 10px; }}
-  .cs-table {{ width: 100%; border-collapse: collapse; font-family: 'Inter', sans-serif; font-size: 0.82rem; }}
-  .cs-table thead th {{ position: sticky; top: 0; background: {COLORS["panel2"]}; color: {COLORS["text_dim"]}; text-transform: uppercase; font-size: 0.66rem; letter-spacing: 0.07em; font-weight: 700; text-align: left; padding: 10px 14px; border-bottom: 1px solid {COLORS["border"]}; }}
-  .cs-table tbody td {{ padding: 8px 14px; color: {COLORS["text"]}; border-bottom: 1px solid {COLORS["border"]}; background: {COLORS["panel"]}; }}
-  .cs-table tbody tr:last-child td {{ border-bottom: none; }}
-  .cs-table tbody tr:nth-child(even) td {{ background: {COLORS["panel2"]}; }}
-  .cs-table td:nth-child(2) {{ font-family: 'JetBrains Mono', monospace; color: {COLORS["accent2"]}; font-weight: 500; }}
-  .cs-table td:nth-child(3) {{ color: {COLORS["text_mid"]}; }}
-  .cs-table td:nth-child(4) {{ color: {COLORS["text_mid"]}; }}
   pre  {{ background: {COLORS["panel2"]} !important; border: 1px solid {COLORS["border"]} !important; border-radius: 8px !important; }}
 </style>
 """
@@ -283,9 +280,10 @@ DEMO_FILES = {
 def bandpass_filter(signal, fs=FS, low=0.5, high=40.0):
     nyq = fs / 2
     b, a = butter(4, [low/nyq, high/nyq], btype="band")
+    # filtfilt needs signal longer than 3x filter order
     min_len = 3 * max(len(a), len(b))
     if len(signal) <= min_len:
-        return signal
+        return signal  # return as-is if too short
     return filtfilt(b, a, signal)
 
 def preprocess(signal, fs=FS):
@@ -391,6 +389,8 @@ def load_catboost_model(path: str):
 # ═══════════════════════════════════════════════════════════════════════════
 
 def _unpack_model(model):
+    """Return (clf, imputer, threshold) whether model is a bare classifier
+    or a dict bundle like {"model":..., "imputer":..., "threshold":...}."""
     if isinstance(model, dict):
         return model["model"], model.get("imputer"), float(model.get("threshold", 0.5))
     return model, None, 0.5
@@ -433,7 +433,7 @@ def hrv_heuristic(features):
     return ("AFib" if prob >= threshold else "Normal"), prob, threshold, reasons
 
 # ═══════════════════════════════════════════════════════════════════════════
-# PLOTS  — all use CardioSense palette
+# PLOTS  — all use AFib AI palette
 # ═══════════════════════════════════════════════════════════════════════════
 
 def _base_layout(**kwargs):
@@ -471,13 +471,13 @@ def plot_ecg(signal, peaks, fs=FS, title="ECG Signal", is_afib=False):
         **_base_layout(height=300, plot_bgcolor=COLORS["ecg_bg"]),
         title=dict(text=title, font=dict(family="Inter", size=12, color=COLORS["text_mid"]), x=0.01),
         xaxis=dict(
-            title=dict(text="Time (s)", font=dict(color=COLORS["text_mid"])), color=COLORS["text_mid"],
+            title="Time (s)", color=COLORS["text_mid"],
             gridcolor=COLORS["ecg_grid_maj"], gridwidth=1, dtick=1, showgrid=True,
             minor=dict(dtick=0.08, gridcolor=COLORS["ecg_grid_min"], showgrid=True),
             tickfont=dict(family="JetBrains Mono", size=10, color=COLORS["text_mid"]),
         ),
         yaxis=dict(
-            title=dict(text="Amplitude (norm.)", font=dict(color=COLORS["text_mid"])), color=COLORS["text_mid"],
+            title="Amplitude (norm.)", color=COLORS["text_mid"],
             gridcolor=COLORS["ecg_grid_maj"], gridwidth=1, dtick=1, showgrid=True,
             minor=dict(dtick=0.1, gridcolor=COLORS["ecg_grid_min"], showgrid=True),
             tickfont=dict(family="JetBrains Mono", size=10, color=COLORS["text_mid"]),
@@ -500,19 +500,17 @@ def plot_rr(rr_ms):
     fig.add_hline(y=m, line_dash="dash", line_color=COLORS["warn"], opacity=0.6,
                   annotation_text=f"Mean: {m:.0f}ms",
                   annotation_font=dict(color=COLORS["warn"], size=10))
-    fig.add_hrect(y0=600, y1=1000, fillcolor="rgba(31,204,122,0.16)", line_width=0,
+    fig.add_hrect(y0=600, y1=1000, fillcolor="rgba(31,204,122,0.05)", line_width=0,
                   annotation_text="Normal range",
                   annotation_position="top left",
                   annotation=dict(font_color=COLORS["success"], font_size=11))
     fig.update_layout(
         **_base_layout(height=260),
         title=dict(text="RR Interval Series", font=dict(family="Inter", size=12, color=COLORS["text_mid"])),
-        xaxis=dict(title=dict(text="Beat #", font=dict(color=COLORS["text_mid"])),
-                   color=COLORS["text_mid"], gridcolor="rgba(91,117,104,0.25)",
-                   tickfont=dict(family="JetBrains Mono", size=10, color=COLORS["text_mid"])),
-        yaxis=dict(title=dict(text="RR (ms)", font=dict(color=COLORS["text_mid"])),
-                   color=COLORS["text_mid"], gridcolor="rgba(91,117,104,0.25)",
-                   tickfont=dict(family="JetBrains Mono", size=10, color=COLORS["text_mid"])),
+        xaxis=dict(title="Beat #", color=COLORS["text_mid"], gridcolor="rgba(91,117,104,0.25)",
+                   tickfont=dict(family="JetBrains Mono", size=10)),
+        yaxis=dict(title="RR (ms)", color=COLORS["text_mid"], gridcolor="rgba(91,117,104,0.25)",
+                   tickfont=dict(family="JetBrains Mono", size=10)),
     )
     return fig
 
@@ -536,11 +534,9 @@ def plot_poincare(rr_ms, is_afib=False):
     fig.update_layout(
         **_base_layout(height=260),
         title=dict(text="Poincaré Plot", font=dict(family="Inter", size=12, color=COLORS["text_mid"])),
-        xaxis=dict(title=dict(text="RRₙ (ms)", font=dict(color=COLORS["text_mid"])),
-                   color=COLORS["text_mid"], gridcolor="rgba(91,117,104,0.25)",
+        xaxis=dict(title="RRₙ (ms)", color=COLORS["text_mid"], gridcolor="rgba(91,117,104,0.25)",
                    range=lim, tickfont=dict(family="JetBrains Mono", size=10, color=COLORS["text_mid"])),
-        yaxis=dict(title=dict(text="RRₙ₊₁ (ms)", font=dict(color=COLORS["text_mid"])),
-                   color=COLORS["text_mid"], gridcolor="rgba(91,117,104,0.25)",
+        yaxis=dict(title="RRₙ₊₁ (ms)", color=COLORS["text_mid"], gridcolor="rgba(91,117,104,0.25)",
                    range=lim, tickfont=dict(family="JetBrains Mono", size=10, color=COLORS["text_mid"])),
     )
     return fig
@@ -597,17 +593,80 @@ def plot_radar(features):
     )
     return fig
 
+def plot_feature_importance_xgb(model):
+    try:
+        clf, _, _ = _unpack_model(model)
+        scores = clf.get_booster().get_fscore()
+        if not scores:
+            scores = dict(zip([f"f{i}" for i in range(len(FEATURE_NAMES))],
+                              clf.feature_importances_))
+        named = {}
+        for k, v in scores.items():
+            try:
+                idx = int(k.replace("f",""))
+                named[FEATURE_NAMES[idx]] = v
+            except Exception:
+                named[k] = v
+        df = pd.DataFrame({"Feature":list(named.keys()),"Importance":list(named.values())})
+        df = df.sort_values("Importance", ascending=True).tail(15)
+        fig = go.Figure(go.Bar(
+            x=df["Importance"], y=df["Feature"], orientation="h",
+            marker_color=COLORS["accent"],
+            text=[f"{v:.0f}" for v in df["Importance"]],
+            textposition="outside",
+            textfont=dict(family="JetBrains Mono", size=10, color=COLORS["text_mid"]),
+        ))
+        fig.update_layout(
+            **_base_layout(height=380),
+            title=dict(text="XGBoost Feature Importance",
+                       font=dict(family="Inter", size=12, color=COLORS["text_mid"])),
+            xaxis=dict(color=COLORS["text_mid"], gridcolor="rgba(91,117,104,0.25)",
+                       tickfont=dict(family="JetBrains Mono", size=10)),
+            yaxis=dict(color=COLORS["text"], tickfont=dict(family="Inter", size=11)),
+            margin=dict(l=130, r=60, t=45, b=40),
+        )
+        return fig
+    except Exception:
+        return None
+
+def plot_feature_importance_cb(model):
+    try:
+        clf, _, _ = _unpack_model(model)
+        imps = clf.get_feature_importance()
+        df = pd.DataFrame({"Feature": FEATURE_NAMES[:len(imps)], "Importance": imps})
+        df = df.sort_values("Importance", ascending=True).tail(15)
+        fig = go.Figure(go.Bar(
+            x=df["Importance"], y=df["Feature"], orientation="h",
+            marker_color=COLORS["warn"],
+            text=[f"{v:.1f}" for v in df["Importance"]],
+            textposition="outside",
+            textfont=dict(family="JetBrains Mono", size=10, color=COLORS["text_mid"]),
+        ))
+        fig.update_layout(
+            **_base_layout(height=380),
+            title=dict(text="CatBoost Feature Importance",
+                       font=dict(family="Inter", size=12, color=COLORS["text_mid"])),
+            xaxis=dict(color=COLORS["text_mid"], gridcolor="rgba(91,117,104,0.25)",
+                       tickfont=dict(family="JetBrains Mono", size=10)),
+            yaxis=dict(color=COLORS["text"], tickfont=dict(family="Inter", size=11)),
+            margin=dict(l=130, r=60, t=45, b=40),
+        )
+        return fig
+    except Exception:
+        return None
+
 # ═══════════════════════════════════════════════════════════════════════════
 # MAIN
 # ═══════════════════════════════════════════════════════════════════════════
 
 def main():
+    # ── SIDEBAR ──────────────────────────────────────────────────────────
     with st.sidebar:
         st.markdown(f"""
         <div style='padding:1rem 0 0.8rem;'>
           <div style='font-size:1.8rem; margin-bottom:6px;'>🫀</div>
           <div style='font-family:"Sora",sans-serif; font-size:1.3rem; color:{COLORS["text"]};
-                      font-weight:700; line-height:1;'>CardioSense</div>
+                      font-weight:700; line-height:1;'>AFib AI</div>
           <div style='font-family:"JetBrains Mono",monospace; font-size:0.55rem;
                       color:{COLORS["text_dim"]}; letter-spacing:0.12em; margin-top:4px;'>
             HRV ANALYSIS v1.0
@@ -623,7 +682,7 @@ def main():
 
         input_mode = st.radio(
             "Input Source",
-            ["Demo ECG", "Upload .npy file", "Upload .csv file"],
+            ["Demo ECG", "Upload .npy file", "Upload .csv file", "ESP32 (WiFi)"],
             label_visibility="collapsed",
         )
 
@@ -640,6 +699,7 @@ def main():
         window_index  = st.number_input("Window index (multi-window files)",
                                         min_value=0, value=0, step=1)
 
+        # ── MODEL SELECTION ─────────────────────────────────────────────
         st.divider()
         st.markdown(f'<div class="cs-label">Model Selection</div>', unsafe_allow_html=True)
 
@@ -647,7 +707,7 @@ def main():
         model_choice_raw = st.radio(
             "Model",
             MODEL_OPTIONS,
-            index=3,
+            index=3,  # Ensemble is the default / recommended option
             label_visibility="collapsed",
         )
         model_choice = model_choice_raw.replace(" ⭐", "")
@@ -666,6 +726,7 @@ def main():
                 st.code(path, language=None)
 
         st.divider()
+        # Model availability badges
         st.markdown(f'<div class="cs-label">Library Status</div>', unsafe_allow_html=True)
         for name, ok in [
             ("Random Forest", SKLEARN_AVAILABLE),
@@ -681,6 +742,7 @@ def main():
           ⚠️ Research tool only.<br>Not a certified medical device.<br>Consult a physician for diagnosis.
         </div>""", unsafe_allow_html=True)
 
+    # ── TOP BAR ──────────────────────────────────────────────────────────
     st.markdown(f"""
     <div style='background:{COLORS["panel"]}; border-bottom:1px solid {COLORS["border"]};
                 padding:0.85rem 2rem; display:flex; align-items:center;
@@ -689,13 +751,14 @@ def main():
         <span style='font-size:1.6rem;'>🫀</span>
         <div>
           <span style='font-family:"Sora",sans-serif; font-size:1.25rem; color:{COLORS["text"]}; font-weight:700;'>
-            CardioSense
+            AFib AI
           </span>
         </div>
       </div>
     </div>
     """, unsafe_allow_html=True)
 
+    # ── SIGNAL LOADING ───────────────────────────────────────────────────
     signal = None
     signal_label = "Unknown"
     demo_meta = None
@@ -722,6 +785,60 @@ def main():
             signal = df.iloc[:, 0].values
             signal_label = uploaded_file.name
 
+    elif input_mode == "ESP32 (WiFi)":
+        st.markdown(f'<div class="cs-label">ESP32 Wi-Fi Stream</div>', unsafe_allow_html=True)
+        col_ip, col_port, col_path = st.columns([2, 1, 2])
+        with col_ip:
+            esp_ip = st.text_input("Device IP", value="192.168.1.50",
+                                    placeholder="e.g. 192.168.1.50")
+        with col_port:
+            esp_port = st.number_input("Port", min_value=1, max_value=65535,
+                                        value=80, step=1)
+        with col_path:
+            esp_path = st.text_input("Endpoint", value="/ecg", placeholder="/ecg")
+
+        fetch_clicked = st.button("📡  Fetch signal from ESP32")
+
+        if fetch_clicked:
+            if not REQUESTS_AVAILABLE:
+                st.error(
+                    "The `requests` library isn't installed. Add `requests` "
+                    "to requirements.txt to enable ESP32 fetching."
+                )
+            elif not esp_ip:
+                st.warning("Enter the ESP32's IP address first.")
+            else:
+                url = f"http://{esp_ip}:{int(esp_port)}{esp_path}"
+                try:
+                    with st.spinner(f"Connecting to {url} …"):
+                        resp = requests.get(url, timeout=5)
+                        resp.raise_for_status()
+                        try:
+                            payload = resp.json()
+                            arr = np.array(payload, dtype=np.float32).flatten()
+                        except ValueError:
+                            text = resp.text.strip()
+                            sep = "," if "," in text else "\n"
+                            arr = np.array(
+                                [float(v) for v in text.split(sep) if v.strip() != ""],
+                                dtype=np.float32,
+                            )
+                    if len(arr) == 0:
+                        st.error("ESP32 responded, but no samples were parsed from the payload.")
+                    else:
+                        st.session_state["esp32_signal"] = arr
+                        st.session_state["esp32_label"]  = f"ESP32 @ {esp_ip}{esp_path}"
+                        st.success(f"Fetched {len(arr):,} samples from ESP32.")
+                except Exception as e:
+                    st.error(f"Failed to fetch from ESP32: {e}")
+
+        if "esp32_signal" in st.session_state:
+            signal = st.session_state["esp32_signal"]
+            signal_label = st.session_state["esp32_label"]
+        else:
+            st.caption("No ESP32 data fetched yet this session.")
+
+    # ── SIGNAL INFO DISPLAY ──────────────────────────────────────────────
     if signal is not None:
         total_seconds = len(signal) / fs_input
         duration_str = f"{total_seconds:.1f}s"
@@ -762,6 +879,7 @@ def main():
 </div>
 """, unsafe_allow_html=True)
 
+    # ── PREPROCESS + FEATURES ────────────────────────────────────────────
     if signal is not None and len(signal) > 0:
         with st.spinner("Processing signal…"):
             proc     = preprocess(signal, fs=fs_input)
@@ -771,8 +889,10 @@ def main():
             features = extract_hrv(signal, fs=fs_input)
             feat     = dict(zip(FEATURE_NAMES, features))
 
+        # ── RUN MODEL ────────────────────────────────────────────────────
         label = prob = threshold = method_note = reasons = None
-        individual_preds = {}
+        imp_fig = None
+        individual_preds = {}   # name -> probability, populated in Ensemble mode
 
         if model_choice == "Random Forest":
             mdl = load_rf_model(MODEL_PATHS["Random Forest"])
@@ -799,6 +919,7 @@ def main():
             else:
                 label, prob, threshold = predict_xgb(mdl, features)
                 method_note = f"XGBoost — {MODEL_PATHS['XGBoost']}"
+                imp_fig = plot_feature_importance_xgb(mdl)
 
         elif model_choice == "CatBoost":
             mdl = load_catboost_model(MODEL_PATHS["CatBoost"])
@@ -812,6 +933,7 @@ def main():
             else:
                 label, prob, threshold = predict_catboost(mdl, features)
                 method_note = f"CatBoost — {MODEL_PATHS['CatBoost']}"
+                imp_fig = plot_feature_importance_cb(mdl)
 
         elif model_choice == "Ensemble":
             rf_model  = load_rf_model(MODEL_PATHS["Random Forest"])
@@ -841,6 +963,7 @@ def main():
                 label, prob, threshold, reasons = hrv_heuristic(features)
                 method_note = "HRV heuristic (no ensemble models found)"
             else:
+                # final_prob = mean of the probabilities from every model that loaded
                 prob = float(np.mean(probs))
                 threshold = 0.3
                 label = "AFib" if prob >= threshold else "Normal"
@@ -862,6 +985,7 @@ def main():
         )
         return
 
+    # ── ALERT BANNER ─────────────────────────────────────────────────────
     if is_afib:
         st.markdown(f"""
         <div class='cs-alert cs-alert-afib'>
@@ -893,6 +1017,7 @@ def main():
           </div>
         </div>""", unsafe_allow_html=True)
 
+    # ── INDIVIDUAL MODEL PREDICTIONS (Ensemble mode) ────────────────────
     if model_choice == "Ensemble" and show_individual and individual_preds:
         rows_html = ""
         for name, p in individual_preds.items():
@@ -910,6 +1035,7 @@ def main():
             unsafe_allow_html=True,
         )
 
+    # ── METRICS ROW ──────────────────────────────────────────────────────
     m1, m2, m3, m4, m5 = st.columns(5)
     m1.metric("AFib Probability", f"{prob*100:.1f}%",
               delta="HIGH ⚠" if is_afib else "Normal",
@@ -922,13 +1048,13 @@ def main():
 
     st.markdown("<div style='height:6px'></div>", unsafe_allow_html=True)
 
+    # ── ECG + GAUGE ──────────────────────────────────────────────────────
     ecg_col, gauge_col = st.columns([3, 1])
-    view_s = min(15, len(signal)/fs_input)
-    n_view = int(view_s * fs_input)
+    view_s = len(signal) / fs_input
     with ecg_col:
         st.plotly_chart(
-            plot_ecg(proc[:n_view], peaks[peaks < n_view], fs=fs_input,
-                     title=f"ECG  ·  First {view_s:.0f}s  ·  {signal_label}",
+            plot_ecg(proc, peaks, fs=fs_input,
+                     title=f"ECG  ·  Full {view_s:.0f}s  ·  {signal_label}",
                      is_afib=is_afib),
             use_container_width=True,
         )
@@ -944,7 +1070,8 @@ def main():
 
     st.markdown("---")
 
-    tabs = st.tabs(["💓  RR Tachogram", "🌀  Poincaré", "📊  HRV Features"])
+    # ── TABS ─────────────────────────────────────────────────────────────
+    tabs = st.tabs(["💓  RR Tachogram", "🌀  Poincaré", "📊  HRV Features", "🌲  Feature Importance"])
 
     with tabs[0]:
         if len(rr_ms) >= 3:
@@ -967,22 +1094,11 @@ def main():
                      "Description":FEATURE_DESCRIPTIONS.get(n,"")}
                     for n, v in zip(FEATURE_NAMES, features)]
             df_feat = pd.DataFrame(rows)
-            table_rows_html = "".join(
-                f"<tr><td>{r['Feature']}</td><td>{r['Value']}</td>"
-                f"<td>{r['Unit']}</td><td>{r['Description']}</td></tr>"
-                for r in rows
-            )
-            st.markdown(f"""
-            <div class="cs-table-wrap">
-              <table class="cs-table">
-                <thead><tr><th>Feature</th><th>Value</th><th>Unit</th><th>Description</th></tr></thead>
-                <tbody>{table_rows_html}</tbody>
-              </table>
-            </div>
-            """, unsafe_allow_html=True)
+            st.dataframe(df_feat, use_container_width=True, height=420, hide_index=True)
         with right:
             st.plotly_chart(plot_radar(features), use_container_width=True)
 
+        # Score breakdown (heuristic only)
         if reasons:
             with st.expander("🔍  Score breakdown (HRV heuristic)", expanded=False):
                 st.markdown(f"""
@@ -1001,6 +1117,22 @@ def main():
                         unsafe_allow_html=True,
                     )
 
+    with tabs[3]:
+        if imp_fig:
+            st.plotly_chart(imp_fig, use_container_width=True)
+            st.caption("Importance is derived from the loaded model weights. "
+                       "Higher = more influential in the AFib/Normal decision.")
+        else:
+            st.markdown(f"""
+            <div class='cs-card'>
+              <div style='font-size:0.85rem; color:{COLORS["text_mid"]}; line-height:1.6;'>
+                Feature importance is available when an <strong style='color:{COLORS["text"]};'>XGBoost</strong>
+                or <strong style='color:{COLORS["text"]};'>CatBoost</strong> model is loaded from the sidebar.
+                The HRV heuristic and Random Forest models do not produce per-feature importance scores here.
+              </div>
+            </div>""", unsafe_allow_html=True)
+
+    # ── DOWNLOAD ─────────────────────────────────────────────────────────
     st.markdown("---")
     st.download_button(
         "⬇  Download HRV Features (CSV)",
