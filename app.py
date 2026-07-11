@@ -480,21 +480,14 @@ def _base_layout(**kwargs):
     base.update(kwargs)
     return base
 
-def plot_ecg(signal, peaks, fs=FS, title="ECG Signal", is_afib=False, window_range=None):
+def plot_ecg(signal, peaks, fs=FS, title="ECG Signal", is_afib=False, t_offset=0.0, x_range=None):
     max_pts = 1500
     step    = max(1, len(signal) // max_pts)
     disp    = signal[::step]
-    t       = np.arange(len(disp)) * step / fs
+    t       = t_offset + np.arange(len(disp)) * step / fs
     tc      = COLORS["ecg_afib"] if is_afib else COLORS["ecg_normal"]
 
     fig = go.Figure()
-
-    if window_range is not None:
-        w_start, w_end = window_range
-        hl = "rgba(220,38,38,0.10)" if is_afib else "rgba(22,163,74,0.10)"
-        fig.add_vrect(x0=w_start, x1=w_end, fillcolor=hl, layer="below", line_width=0)
-        for x in (w_start, w_end):
-            fig.add_vline(x=x, line=dict(color=tc, width=1.2, dash="dot"))
 
     fig.add_trace(go.Scatter(
         x=t, y=disp, mode="lines",
@@ -504,20 +497,24 @@ def plot_ecg(signal, peaks, fs=FS, title="ECG Signal", is_afib=False, window_ran
     if len(peaks):
         valid = peaks[(peaks >= 0) & (peaks < len(signal))]
         fig.add_trace(go.Scatter(
-            x=valid / fs, y=signal[valid], mode="markers",
+            x=t_offset + valid / fs, y=signal[valid], mode="markers",
             marker=dict(color=COLORS["danger"], size=8, symbol="circle",
                         line=dict(color="white", width=1.5)),
             name="R-peaks",
         ))
+    xaxis_kwargs = dict(
+        title="Time (s)", color=COLORS["text_mid"],
+        gridcolor=COLORS["ecg_grid_maj"], gridwidth=1, dtick=1, showgrid=True,
+        minor=dict(dtick=0.08, gridcolor=COLORS["ecg_grid_min"], showgrid=True),
+        tickfont=dict(family="JetBrains Mono", size=10, color=COLORS["text_mid"]),
+    )
+    if x_range is not None:
+        xaxis_kwargs["range"] = list(x_range)
+        xaxis_kwargs["autorange"] = False
     fig.update_layout(
         **_base_layout(height=300, plot_bgcolor=COLORS["ecg_bg"]),
         title=dict(text=title, font=dict(family="Inter", size=12, color=COLORS["text_mid"]), x=0.01),
-        xaxis=dict(
-            title="Time (s)", color=COLORS["text_mid"],
-            gridcolor=COLORS["ecg_grid_maj"], gridwidth=1, dtick=1, showgrid=True,
-            minor=dict(dtick=0.08, gridcolor=COLORS["ecg_grid_min"], showgrid=True),
-            tickfont=dict(family="JetBrains Mono", size=10, color=COLORS["text_mid"]),
-        ),
+        xaxis=xaxis_kwargs,
         yaxis=dict(
             title="Amplitude (norm.)", color=COLORS["text_mid"],
             gridcolor=COLORS["ecg_grid_maj"], gridwidth=1, dtick=1, showgrid=True,
@@ -924,9 +921,7 @@ def main():
     # ── PREPROCESS + SLIDING WINDOWS ─────────────────────────────────────
     if signal is not None and len(signal) > 0:
         with st.spinner("Processing signal…"):
-            proc_full  = preprocess(signal, fs=fs_input)
-            peaks_full = detect_rpeaks(signal, fs=fs_input)
-            windows    = sliding_windows(signal, fs_input)
+            windows = sliding_windows(signal, fs_input)
 
         n_win = len(windows)
 
@@ -960,6 +955,7 @@ def main():
         seg = signal[w["start_idx"]:w["end_idx"]]
 
         with st.spinner("Scoring window…"):
+            proc_seg = preprocess(seg, fs=fs_input)
             peaks    = detect_rpeaks(seg, fs=fs_input)
             rr_ms    = np.diff(peaks) / fs_input * 1000
             rr_ms    = rr_ms[(rr_ms > 250) & (rr_ms < 2000)]
@@ -1153,13 +1149,13 @@ def main():
     </div>
     """, unsafe_allow_html=True)
 
-    # ── ECG (full width, with selected window highlighted) ──────────────
-    view_s = len(signal) / fs_input
+    # ── ECG (fixed-width strip — pans as the window slider moves) ───────
     st.plotly_chart(
-        plot_ecg(proc_full, peaks_full, fs=fs_input,
-                 title=f"ECG  ·  Full {view_s:.0f}s  ·  {signal_label}",
+        plot_ecg(proc_seg, peaks, fs=fs_input,
+                 title=f"ECG  ·  Window {w['start_sec']:.1f}s–{w['end_sec']:.1f}s  ·  {signal_label}",
                  is_afib=is_afib,
-                 window_range=(w["start_sec"], w["end_sec"])),
+                 t_offset=w["start_sec"],
+                 x_range=(w["start_sec"], w["end_sec"])),
         use_container_width=True,
     )
 
