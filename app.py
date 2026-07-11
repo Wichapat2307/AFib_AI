@@ -557,32 +557,6 @@ def plot_poincare(rr_ms, is_afib=False):
     )
     return fig
 
-def plot_gauge(prob):
-    color = COLORS["success"] if prob < 0.35 else COLORS["warn"] if prob < 0.65 else COLORS["danger"]
-    fig = go.Figure(go.Indicator(
-        mode="gauge+number",
-        value=prob * 100,
-        number=dict(suffix="%", font=dict(color=color, size=34, family="JetBrains Mono")),
-        gauge=dict(
-            axis=dict(range=[0,100], tickcolor=COLORS["text_dim"],
-                      tickfont=dict(color=COLORS["text_dim"], family="JetBrains Mono", size=9)),
-            bar=dict(color=color, thickness=0.28),
-            bgcolor=COLORS["panel2"],
-            borderwidth=1, bordercolor=COLORS["border"],
-            steps=[
-                dict(range=[0,   35], color="rgba(31,204,122,0.07)"),
-                dict(range=[35,  65], color="rgba(244,161,36,0.07)"),
-                dict(range=[65, 100], color="rgba(240,64,96,0.07)"),
-            ],
-            threshold=dict(line=dict(color=COLORS["danger"], width=2), value=65),
-        ),
-    ))
-    fig.update_layout(
-        paper_bgcolor=COLORS["panel"], height=190,
-        margin=dict(l=15, r=15, t=15, b=10),
-        font=dict(color=COLORS["text"]),
-    )
-    return fig
 
 def plot_radar(features):
     keys   = ["sdnn","rmssd","pnn50","irr_score","cv_rr","sd1","sd2","lf_hf"]
@@ -980,25 +954,31 @@ def main():
 
     st.markdown("<div style='height:6px'></div>", unsafe_allow_html=True)
 
-    ecg_col, gauge_col = st.columns([3, 1])
     view_s = len(signal) / fs_input
     n_view = len(signal)
-    with ecg_col:
-        st.plotly_chart(
-            plot_ecg(proc[:n_view], peaks[peaks < n_view], fs=fs_input,
-                     title=f"ECG  ·  Full {view_s:.0f}s  ·  {signal_label}",
-                     is_afib=is_afib),
-            use_container_width=True,
-        )
-    with gauge_col:
-        st.markdown("<div style='height:6px'></div>", unsafe_allow_html=True)
-        st.plotly_chart(plot_gauge(prob), use_container_width=True)
-        lbl_c = COLORS["danger"] if is_afib else COLORS["success"]
-        st.markdown(
-            f"<div style='text-align:center; font-family:Inter; font-size:0.72rem;"
-            f" color:{lbl_c}; font-weight:700; margin-top:-10px;'>{label.upper()}</div>",
-            unsafe_allow_html=True,
-        )
+    st.plotly_chart(
+        plot_ecg(proc[:n_view], peaks[peaks < n_view], fs=fs_input,
+                 title=f"ECG  ·  Full {view_s:.0f}s  ·  {signal_label}",
+                 is_afib=is_afib),
+        use_container_width=True,
+    )
+
+    bar_color = COLORS["success"] if prob < 0.35 else COLORS["warn"] if prob < 0.65 else COLORS["danger"]
+    bar_pct = max(1, int(round(prob * 100)))
+    st.markdown(f"""
+    <div class="cs-card" style="padding:1.1rem 1.5rem;">
+      <div style="display:flex; justify-content:space-between; align-items:baseline; margin-bottom:10px;">
+        <div class="cs-label" style="margin:0; padding:0; border:none;">AFib Probability</div>
+        <div style="font-family:'JetBrains Mono',monospace; font-size:1.3rem; font-weight:700; color:{bar_color};">{prob*100:.1f}%</div>
+      </div>
+      <div style="position:relative; background:{COLORS['panel2']}; border:1px solid {COLORS['border']}; border-radius:8px; height:16px; overflow:hidden;">
+        <div style="width:{bar_pct}%; background:{bar_color}; height:100%; border-radius:8px; transition:width 0.3s ease;"></div>
+        <div style="position:absolute; left:35%; top:0; bottom:0; width:1px; background:{COLORS['border_light']};"></div>
+        <div style="position:absolute; left:65%; top:0; bottom:0; width:1px; background:{COLORS['border_light']};"></div>
+      </div>
+      <div style="text-align:right; margin-top:6px; font-size:0.75rem; font-weight:700; color:{bar_color}; text-transform:uppercase; letter-spacing:0.05em;">{label}</div>
+    </div>
+    """, unsafe_allow_html=True)
 
     st.markdown("---")
 
