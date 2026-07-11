@@ -480,7 +480,8 @@ def _base_layout(**kwargs):
     base.update(kwargs)
     return base
 
-def plot_ecg(signal, peaks, fs=FS, title="ECG Signal", is_afib=False, t_offset=0.0, x_range=None):
+def plot_ecg(signal, peaks, fs=FS, title="ECG Signal", is_afib=False,
+             t_offset=0.0, x_range=None, window_range=None, dragmode=None):
     max_pts = 1500
     step    = max(1, len(signal) // max_pts)
     disp    = signal[::step]
@@ -488,6 +489,13 @@ def plot_ecg(signal, peaks, fs=FS, title="ECG Signal", is_afib=False, t_offset=0
     tc      = COLORS["ecg_afib"] if is_afib else COLORS["ecg_normal"]
 
     fig = go.Figure()
+
+    if window_range is not None:
+        w_start, w_end = window_range
+        hl = "rgba(220,38,38,0.12)" if is_afib else "rgba(22,163,74,0.12)"
+        fig.add_vrect(x0=w_start, x1=w_end, fillcolor=hl, layer="below", line_width=0)
+        for x in (w_start, w_end):
+            fig.add_vline(x=x, line=dict(color=tc, width=1.4, dash="dot"))
 
     fig.add_trace(go.Scatter(
         x=t, y=disp, mode="lines",
