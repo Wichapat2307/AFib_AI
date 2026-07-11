@@ -769,7 +769,7 @@ def main():
 
         show_individual = True
         if model_choice == "Ensemble":
-            show_individual = st.checkbox("Show individual model predictions", value=True)
+            show_individual = st.checkbox("Show individual model predictions", value=False)
 
         st.divider()
         with st.expander("🛠️ Model path debug", expanded=False):
