@@ -241,6 +241,9 @@ st.markdown(CSS, unsafe_allow_html=True)
 FS     = 128
 WINDOW = 3840   # 30 s × 128 Hz
 
+SLIDE_WIN_SEC  = 15.0   # width of the sliding analysis window, in seconds
+SLIDE_STEP_SEC = 1.0    # how far the window advances per step, in seconds
+
 APP_DIR = Path(__file__).parent.resolve()
 
 MODEL_PATHS = {
@@ -444,6 +447,89 @@ def hrv_heuristic(features):
     threshold = 0.45
     return ("AFib" if prob >= threshold else "Normal"), prob, threshold, reasons
 
+
+def run_prediction(model_choice, features, silent=False):
+    """
+    Runs the selected model (or falls back to the HRV heuristic) on a single
+    feature vector. Shared by the full-signal prediction and the sliding
+    window, so both stay in sync.
+
+    Returns: label, prob, threshold, method_note, reasons(dict|None), individual_preds(dict)
+    """
+    reasons = None
+    individual_preds = {}
+
+    def _warn(msg):
+        if not silent:
+            st.warning(msg)
+
+    if model_choice == "Random Forest":
+        mdl = load_rf_model(MODEL_PATHS["Random Forest"])
+        if mdl is None:
+            _warn(f"Random Forest model not found at `{MODEL_PATHS['Random Forest']}`. "
+                  "Falling back to HRV heuristic.")
+            label, prob, threshold, reasons = hrv_heuristic(features)
+            method_note = "HRV heuristic (Random Forest weights missing)"
+        else:
+            label, prob, threshold = predict_rf(mdl, features)
+            method_note = f"Random Forest — {MODEL_PATHS['Random Forest']}"
+
+    elif model_choice == "XGBoost":
+        mdl = load_xgb_model(MODEL_PATHS["XGBoost"])
+        if mdl is None:
+            _warn(f"XGBoost model not found at `{MODEL_PATHS['XGBoost']}`. "
+                  "Falling back to HRV heuristic.")
+            label, prob, threshold, reasons = hrv_heuristic(features)
+            method_note = "HRV heuristic (XGBoost weights missing)"
+        else:
+            label, prob, threshold = predict_xgb(mdl, features)
+            method_note = f"XGBoost — {MODEL_PATHS['XGBoost']}"
+
+    elif model_choice == "CatBoost":
+        mdl = load_catboost_model(MODEL_PATHS["CatBoost"])
+        if mdl is None:
+            _warn(f"CatBoost model not found at `{MODEL_PATHS['CatBoost']}`. "
+                  "Falling back to HRV heuristic.")
+            label, prob, threshold, reasons = hrv_heuristic(features)
+            method_note = "HRV heuristic (CatBoost weights missing)"
+        else:
+            label, prob, threshold = predict_catboost(mdl, features)
+            method_note = f"CatBoost — {MODEL_PATHS['CatBoost']}"
+
+    elif model_choice == "Ensemble":
+        rf_model  = load_rf_model(MODEL_PATHS["Random Forest"])
+        xgb_model = load_xgb_model(MODEL_PATHS["XGBoost"])
+        cat_model = load_catboost_model(MODEL_PATHS["CatBoost"])
+
+        probs = []
+        if rf_model is not None:
+            _, p, _ = predict_rf(rf_model, features)
+            probs.append(p); individual_preds["Random Forest"] = p
+        if xgb_model is not None:
+            _, p, _ = predict_xgb(xgb_model, features)
+            probs.append(p); individual_preds["XGBoost"] = p
+        if cat_model is not None:
+            _, p, _ = predict_catboost(cat_model, features)
+            probs.append(p); individual_preds["CatBoost"] = p
+
+        if len(probs) == 0:
+            _warn("None of the ensemble model weights were found "
+                  f"(`{MODEL_PATHS['Random Forest']}`, `{MODEL_PATHS['XGBoost']}`, "
+                  f"`{MODEL_PATHS['CatBoost']}`). Falling back to HRV heuristic.")
+            label, prob, threshold, reasons = hrv_heuristic(features)
+            method_note = "HRV heuristic (no ensemble models found)"
+        else:
+            prob = float(np.mean(probs))
+            threshold = 0.3
+            label = "AFib" if prob >= threshold else "Normal"
+            method_note = f"Ensemble — mean of {len(probs)}/3 models"
+
+    else:
+        label, prob, threshold, reasons = hrv_heuristic(features)
+        method_note = "HRV heuristic"
+
+    return label, prob, threshold, method_note, reasons, individual_preds
+
 # ═══════════════════════════════════════════════════════════════════════════
 # PLOTS  — all use CardioSense palette
 # ═══════════════════════════════════════════════════════════════════════════
@@ -458,7 +544,8 @@ def _base_layout(**kwargs):
     base.update(kwargs)
     return base
 
-def plot_ecg(signal, peaks, fs=FS, title="ECG Signal", is_afib=False):
+def plot_ecg(signal, peaks, fs=FS, title="ECG Signal", is_afib=False,
+             window_range=None, window_color=None):
     max_pts = 1500
     step    = max(1, len(signal) // max_pts)
     disp    = signal[::step]
@@ -466,6 +553,17 @@ def plot_ecg(signal, peaks, fs=FS, title="ECG Signal", is_afib=False):
     tc      = COLORS["ecg_afib"] if is_afib else COLORS["ecg_normal"]
 
     fig = go.Figure()
+
+    if window_range is not None:
+        w_start, w_end = window_range
+        wc = window_color or COLORS["accent"]
+        fig.add_vrect(
+            x0=w_start, x1=w_end,
+            fillcolor=wc, opacity=0.14,
+            line=dict(color=wc, width=2),
+            layer="below",
+        )
+
     fig.add_trace(go.Scatter(
         x=t, y=disp, mode="lines",
         line=dict(color=tc, width=1.4), name="ECG",
@@ -803,81 +901,9 @@ def main():
             features = extract_hrv(signal, fs=fs_input)
             feat     = dict(zip(FEATURE_NAMES, features))
 
-        label = prob = threshold = method_note = reasons = None
-        individual_preds = {}
-
-        if model_choice == "Random Forest":
-            mdl = load_rf_model(MODEL_PATHS["Random Forest"])
-            if mdl is None:
-                st.warning(
-                    f"Random Forest model not found at `{MODEL_PATHS['Random Forest']}`. "
-                    "Falling back to HRV heuristic."
-                )
-                label, prob, threshold, reasons = hrv_heuristic(features)
-                method_note = "HRV heuristic (Random Forest weights missing)"
-            else:
-                label, prob, threshold = predict_rf(mdl, features)
-                method_note = f"Random Forest — {MODEL_PATHS['Random Forest']}"
-
-        elif model_choice == "XGBoost":
-            mdl = load_xgb_model(MODEL_PATHS["XGBoost"])
-            if mdl is None:
-                st.warning(
-                    f"XGBoost model not found at `{MODEL_PATHS['XGBoost']}`. "
-                    "Falling back to HRV heuristic."
-                )
-                label, prob, threshold, reasons = hrv_heuristic(features)
-                method_note = "HRV heuristic (XGBoost weights missing)"
-            else:
-                label, prob, threshold = predict_xgb(mdl, features)
-                method_note = f"XGBoost — {MODEL_PATHS['XGBoost']}"
-
-        elif model_choice == "CatBoost":
-            mdl = load_catboost_model(MODEL_PATHS["CatBoost"])
-            if mdl is None:
-                st.warning(
-                    f"CatBoost model not found at `{MODEL_PATHS['CatBoost']}`. "
-                    "Falling back to HRV heuristic."
-                )
-                label, prob, threshold, reasons = hrv_heuristic(features)
-                method_note = "HRV heuristic (CatBoost weights missing)"
-            else:
-                label, prob, threshold = predict_catboost(mdl, features)
-                method_note = f"CatBoost — {MODEL_PATHS['CatBoost']}"
-
-        elif model_choice == "Ensemble":
-            rf_model  = load_rf_model(MODEL_PATHS["Random Forest"])
-            xgb_model = load_xgb_model(MODEL_PATHS["XGBoost"])
-            cat_model = load_catboost_model(MODEL_PATHS["CatBoost"])
-
-            probs = []
-            if rf_model is not None:
-                _, p, _ = predict_rf(rf_model, features)
-                probs.append(p)
-                individual_preds["Random Forest"] = p
-            if xgb_model is not None:
-                _, p, _ = predict_xgb(xgb_model, features)
-                probs.append(p)
-                individual_preds["XGBoost"] = p
-            if cat_model is not None:
-                _, p, _ = predict_catboost(cat_model, features)
-                probs.append(p)
-                individual_preds["CatBoost"] = p
-
-            if len(probs) == 0:
-                st.warning(
-                    "None of the ensemble model weights were found "
-                    f"(`{MODEL_PATHS['Random Forest']}`, `{MODEL_PATHS['XGBoost']}`, "
-                    f"`{MODEL_PATHS['CatBoost']}`). Falling back to HRV heuristic."
-                )
-                label, prob, threshold, reasons = hrv_heuristic(features)
-                method_note = "HRV heuristic (no ensemble models found)"
-            else:
-                prob = float(np.mean(probs))
-                threshold = 0.3
-                label = "AFib" if prob >= threshold else "Normal"
-                method_note = f"Ensemble — mean of {len(probs)}/3 models"
-
+        label, prob, threshold, method_note, reasons, individual_preds = run_prediction(
+            model_choice, features, silent=False
+        )
         is_afib = label == "AFib"
 
     else:
@@ -974,12 +1000,90 @@ def main():
     </div>
     """, unsafe_allow_html=True)
 
+    # ─────────────────────────────────────────────────────────────────────
+    # SLIDING WINDOW ANALYSIS
+    # A SLIDE_WIN_SEC-wide box that steps across the segment in
+    # SLIDE_STEP_SEC increments, re-running the selected model on just the
+    # samples inside the box.
+    # ─────────────────────────────────────────────────────────────────────
+    max_start = max(0.0, view_s - SLIDE_WIN_SEC)
+    has_sliding_window = view_s >= SLIDE_WIN_SEC
+
+    if "sw_pos" not in st.session_state:
+        st.session_state.sw_pos = 0.0
+    if "sw_playing" not in st.session_state:
+        st.session_state.sw_playing = False
+    # Clip to the current signal's range (new file may be shorter/longer)
+    st.session_state.sw_pos = min(st.session_state.sw_pos, max_start)
+
+    window_range = None
+    window_color = None
+
+    if has_sliding_window:
+        st.markdown(f'<div class="cs-label">Sliding Window Analysis · {SLIDE_WIN_SEC:.0f}s window, steps {SLIDE_STEP_SEC:.0f}s at a time</div>', unsafe_allow_html=True)
+
+        c_play, c_pause, c_reset, c_speed = st.columns([1, 1, 1, 2.4])
+        if c_play.button("▶  Play", use_container_width=True, key="sw_play_btn"):
+            st.session_state.sw_playing = True
+        if c_pause.button("⏸  Pause", use_container_width=True, key="sw_pause_btn"):
+            st.session_state.sw_playing = False
+        if c_reset.button("⏮  Reset", use_container_width=True, key="sw_reset_btn"):
+            st.session_state.sw_pos = 0.0
+            st.session_state.sw_playing = False
+        speed = c_speed.slider("Steps / sec", 0.5, 5.0, 2.0, 0.5, key="sw_speed")
+
+        # Advance the window if playing, before the slider widget is created
+        # (session_state for a widget's key can only be set before it exists
+        # in this run — this is what drives the "auto-play" effect).
+        if st.session_state.sw_playing:
+            next_pos = st.session_state.sw_pos + SLIDE_STEP_SEC
+            st.session_state.sw_pos = 0.0 if next_pos > max_start else next_pos
+
+        sw_pos = st.slider(
+            "Window start (s)", 0.0, float(max_start),
+            value=float(st.session_state.sw_pos), step=SLIDE_STEP_SEC,
+            key="sw_slider",
+        )
+        st.session_state.sw_pos = sw_pos
+
+        start_sample = int(round(sw_pos * fs_input))
+        end_sample   = start_sample + int(round(SLIDE_WIN_SEC * fs_input))
+        window_sig   = signal[start_sample:end_sample]
+
+        window_peaks    = detect_rpeaks(window_sig, fs=fs_input)
+        window_features = extract_hrv(window_sig, fs=fs_input)
+        (w_label, w_prob, w_threshold, w_method_note,
+         w_reasons, w_individual) = run_prediction(model_choice, window_features, silent=True)
+        w_is_afib = w_label == "AFib"
+
+        window_range = (sw_pos, sw_pos + SLIDE_WIN_SEC)
+        window_color = COLORS["danger"] if w_is_afib else COLORS["accent"]
+
+        wc1, wc2, wc3, wc4 = st.columns(4)
+        wc1.metric("Window", f"{sw_pos:.0f}s – {sw_pos+SLIDE_WIN_SEC:.0f}s")
+        wc2.metric("Window AFib Prob.", f"{w_prob*100:.1f}%",
+                   delta=w_label, delta_color="inverse" if w_is_afib else "normal")
+        wc3.metric("Window R-Peaks", str(len(window_peaks)))
+        wc4.metric("Method", "Heuristic" if w_reasons is not None else model_choice)
+
+        st.markdown("<div style='height:2px'></div>", unsafe_allow_html=True)
+
+    else:
+        st.info(f"Sliding window analysis needs at least {SLIDE_WIN_SEC:.0f}s of signal "
+                f"(this segment is {view_s:.1f}s).")
+
     st.plotly_chart(
         plot_ecg(proc[:n_view], peaks[peaks < n_view], fs=fs_input,
                  title=f"ECG  ·  Full {view_s:.0f}s  ·  {signal_label}",
-                 is_afib=is_afib),
+                 is_afib=is_afib,
+                 window_range=window_range, window_color=window_color),
         use_container_width=True,
     )
+
+    # Keep the animation going: rerun after a short pause while playing.
+    if has_sliding_window and st.session_state.sw_playing:
+        time.sleep(1.0 / speed)
+        st.rerun()
 
     st.markdown("---")
 
