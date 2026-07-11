@@ -11,3 +11,4 @@ torch
 torchvision
 gdown
 wfdb
+requests
