@@ -556,12 +556,28 @@ def plot_ecg(signal, peaks, fs=FS, title="ECG Signal", is_afib=False,
 
     if window_range is not None:
         w_start, w_end = window_range
+        w_center = (w_start + w_end) / 2
         wc = window_color or COLORS["accent"]
         fig.add_vrect(
             x0=w_start, x1=w_end,
-            fillcolor=wc, opacity=0.14,
-            line=dict(color=wc, width=2),
+            fillcolor=wc, opacity=0.28,
+            line=dict(color=wc, width=4),
             layer="below",
+        )
+        # A thick center line + callout label keep the window visible even
+        # when it's a thin sliver relative to a very long recording.
+        fig.add_vline(
+            x=w_center, line=dict(color=wc, width=3, dash="solid"),
+            opacity=0.9,
+        )
+        fig.add_annotation(
+            x=w_center, y=1.0, xref="x", yref="paper",
+            text=f"◆ WINDOW  {w_start:.0f}s–{w_end:.0f}s",
+            showarrow=True, arrowhead=2, arrowsize=1, arrowwidth=2,
+            arrowcolor=wc, ax=0, ay=-32,
+            font=dict(family="JetBrains Mono", size=11, color=wc),
+            bgcolor="rgba(255,255,255,0.92)", bordercolor=wc, borderwidth=1.5,
+            borderpad=4,
         )
 
     fig.add_trace(go.Scatter(
@@ -578,7 +594,8 @@ def plot_ecg(signal, peaks, fs=FS, title="ECG Signal", is_afib=False,
             name="R-peaks",
         ))
     fig.update_layout(
-        **_base_layout(height=300, plot_bgcolor=COLORS["ecg_bg"]),
+        **_base_layout(height=300, plot_bgcolor=COLORS["ecg_bg"],
+                        margin=dict(l=55, r=20, t=(75 if window_range is not None else 45), b=45)),
         title=dict(text=title, font=dict(family="Inter", size=12, color=COLORS["text_mid"]), x=0.01),
         xaxis=dict(
             title=dict(text="Time (s)", font=dict(color=COLORS["text_mid"])), color=COLORS["text_mid"],
