@@ -956,12 +956,6 @@ def main():
 
     view_s = len(signal) / fs_input
     n_view = len(signal)
-    st.plotly_chart(
-        plot_ecg(proc[:n_view], peaks[peaks < n_view], fs=fs_input,
-                 title=f"ECG  ·  Full {view_s:.0f}s  ·  {signal_label}",
-                 is_afib=is_afib),
-        use_container_width=True,
-    )
 
     bar_color = COLORS["success"] if prob < 0.35 else COLORS["warn"] if prob < 0.65 else COLORS["danger"]
     bar_pct = max(1, int(round(prob * 100)))
@@ -979,6 +973,13 @@ def main():
       <div style="text-align:right; margin-top:6px; font-size:0.75rem; font-weight:700; color:{bar_color}; text-transform:uppercase; letter-spacing:0.05em;">{label}</div>
     </div>
     """, unsafe_allow_html=True)
+
+    st.plotly_chart(
+        plot_ecg(proc[:n_view], peaks[peaks < n_view], fs=fs_input,
+                 title=f"ECG  ·  Full {view_s:.0f}s  ·  {signal_label}",
+                 is_afib=is_afib),
+        use_container_width=True,
+    )
 
     st.markdown("---")
 
