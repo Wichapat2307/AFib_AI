@@ -875,11 +875,25 @@ def login_screen():
 
 
 def medical_intake_screen():
-    """Step 2: collect just Full Name and Age before unlocking the main app.
+    """Step 2: collect basic medical / demographic info before unlocking the
+    main app. There's a Skip button at the top right that bypasses the form.
     Mock — values are stored in session state only."""
     _login_css()
 
     user = st.session_state.get("auth_user", "User")
+
+    # ── Top-right "Skip" button — sits above the card so it doesn't move
+    # when the form changes. Right-aligned with a narrow left column.
+    _spacer, _skip_col = st.columns([11, 1])
+    with _skip_col:
+        if st.button("Skip →", key="intake_skip_top",
+                      help="Skip the intake form and go straight to the app."):
+            st.session_state["auth_user_data"] = {
+                "full_name": user, "age": None, "skipped": True,
+            }
+            st.session_state["authenticated"] = True
+            st.rerun()
+
     st.markdown(f"""
     <div class="login-wrap">
       <div class="login-hero">
@@ -887,8 +901,8 @@ def medical_intake_screen():
         <div class="tag">STEP 2 OF 2</div>
         <h1>About You</h1>
         <div class="sub">
-          Welcome, <b>{user}</b>. Please share two quick details<br>
-          so we can label your results.
+          Welcome, <b>{user}</b>. Please share a few details so we can
+          contextualize your results. All fields stay in this session.
         </div>
       </div>
     </div>
@@ -899,25 +913,60 @@ def medical_intake_screen():
 
     st.markdown(f"""
       <div class="login-warn">
-        ⚠️ The information below stays in this browser session only.<br>
-        AFibAI is a research prototype, not a medical device.
+        ⚠️ The information below is <b>not</b> sent to any server and is used
+        only to add context to your analysis. This tool is a research
+        prototype, not a medical device.
       </div>
     """, unsafe_allow_html=True)
 
     with st.form("intake_form", clear_on_submit=False):
-        full_name = st.text_input("Full Name", placeholder="e.g. Jane Doe",
-                                   key="mi_name")
-        age = st.number_input("Age (years)", min_value=0, max_value=120,
-                               value=30, step=1, key="mi_age")
+        c1, c2 = st.columns(2)
+        with c1:
+            full_name = st.text_input("Full Name", placeholder="e.g. Jane Doe",
+                                       key="mi_name")
+            age = st.number_input("Age (years)", min_value=0, max_value=120,
+                                   value=30, step=1, key="mi_age")
+            gender = st.selectbox("Gender", ["Female", "Male", "Other", "Prefer not to say"],
+                                   key="mi_gender")
+        with c2:
+            weight = st.number_input("Weight (kg)", min_value=0.0, max_value=400.0,
+                                      value=65.0, step=0.1, key="mi_weight")
+            height = st.number_input("Height (cm)", min_value=0.0, max_value=250.0,
+                                      value=165.0, step=0.1, key="mi_height")
+            smoke = st.selectbox("Smoking status",
+                                  ["Never", "Former", "Current", "Prefer not to say"],
+                                  key="mi_smoke")
+
+        st.markdown("<div style='height:0.4rem'></div>", unsafe_allow_html=True)
+        med_hist = st.text_area("Medical History",
+                                 placeholder="e.g. Hypertension, diabetes, prior arrhythmia, …",
+                                 key="mi_hist", height=70)
+        meds = st.text_input("Current Medications",
+                              placeholder="e.g. Metoprolol 25 mg, Aspirin 81 mg",
+                              key="mi_meds")
+        allergies = st.text_input("Known Allergies",
+                                   placeholder="e.g. Penicillin, latex",
+                                   key="mi_allergies")
+        c3, c4 = st.columns(2)
+        with c3:
+            family = st.text_input("Family History of Heart Disease",
+                                    placeholder="e.g. Father — AFib; Mother — HTN",
+                                    key="mi_family")
+        with c4:
+            prev_ecg = st.text_input("Previous ECG Results (if any)",
+                                      placeholder="e.g. Normal sinus rhythm, 2024",
+                                      key="mi_prev")
+        reason = st.text_area("Reason for using AFibAI",
+                               placeholder="e.g. Routine screening, symptom follow-up, research, …",
+                               key="mi_reason", height=60)
 
         st.markdown("<div style='height:0.6rem'></div>", unsafe_allow_html=True)
         agreed = st.checkbox("I understand this is a research tool, not a medical device.",
                               key="mi_agree")
-        st.markdown("<div style='height:0.4rem'></div>", unsafe_allow_html=True)
-        c1, c2 = st.columns([1, 1])
-        with c1:
+        c5, c6 = st.columns([1, 1])
+        with c5:
             back = st.form_submit_button("← Back", use_container_width=True)
-        with c2:
+        with c6:
             submit = st.form_submit_button("Submit & Enter  →", use_container_width=True)
 
     if back:
@@ -934,6 +983,16 @@ def medical_intake_screen():
             st.session_state["auth_user_data"] = {
                 "full_name": full_name.strip(),
                 "age": int(age),
+                "gender": gender,
+                "weight_kg": float(weight),
+                "height_cm": float(height),
+                "smoking": smoke,
+                "medical_history": med_hist.strip(),
+                "medications": meds.strip(),
+                "allergies": allergies.strip(),
+                "family_history": family.strip(),
+                "previous_ecg": prev_ecg.strip(),
+                "reason": reason.strip(),
             }
             st.session_state["authenticated"] = True
             st.rerun()
