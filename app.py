@@ -699,6 +699,250 @@ def plot_radar(features):
     return fig
 
 # ═══════════════════════════════════════════════════════════════════════════
+# LOGIN / REGISTRATION GATE  (mock auth — no real password check, no DB)
+# ═══════════════════════════════════════════════════════════════════════════
+
+def _login_css():
+    """Extra CSS for the login + medical-info screen. Reuses the AFibAI palette."""
+    st.markdown(f"""
+    <style>
+      .login-wrap {{
+        max-width: 520px; margin: 4rem auto 2rem; padding: 0 1.5rem;
+      }}
+      .login-hero {{
+        text-align: center; margin-bottom: 1.6rem;
+      }}
+      .login-hero .heart {{
+        font-size: 2.6rem; line-height: 1; margin-bottom: 10px;
+      }}
+      .login-hero h1 {{
+        font-family: 'Sora', sans-serif; font-size: 1.9rem; font-weight: 700;
+        color: {COLORS['text']}; margin: 0 0 4px;
+      }}
+      .login-hero .tag {{
+        font-family: 'JetBrains Mono', monospace; font-size: 0.62rem;
+        color: {COLORS['text_dim']}; letter-spacing: 0.18em;
+        text-transform: uppercase; margin-bottom: 6px;
+      }}
+      .login-hero .sub {{
+        font-size: 0.82rem; color: {COLORS['text_mid']}; line-height: 1.5;
+        max-width: 420px; margin: 0 auto;
+      }}
+      .login-card {{
+        background: {COLORS['panel']};
+        border: 1px solid {COLORS['border']};
+        border-radius: 14px;
+        padding: 1.8rem 1.8rem 1.4rem;
+        box-shadow: 0 1px 0 rgba(255,255,255,0.6) inset, 0 6px 24px rgba(20,40,30,0.04);
+      }}
+      .login-tabs [data-baseweb="tab-list"] {{
+        background: {COLORS['panel2']} !important;
+        border: 1px solid {COLORS['border']} !important;
+        border-radius: 10px !important;
+        padding: 4px !important; gap: 4px;
+      }}
+      .login-tabs [data-baseweb="tab"] {{
+        color: {COLORS['text_mid']} !important;
+        -webkit-text-fill-color: {COLORS['text_mid']} !important;
+        text-transform: none !important;
+        letter-spacing: 0 !important;
+        font-size: 0.85rem !important;
+        font-weight: 600 !important;
+        padding: 0.5rem 1rem !important;
+        border-radius: 7px !important;
+        background: transparent !important;
+        opacity: 1 !important;
+      }}
+      .login-tabs [aria-selected="true"] {{
+        background: {COLORS['panel']} !important;
+        color: {COLORS['text']} !important;
+        -webkit-text-fill-color: {COLORS['text']} !important;
+        box-shadow: 0 1px 3px rgba(20,40,30,0.08) !important;
+        opacity: 1 !important;
+      }}
+      .login-tabs [data-baseweb="tab-panel"] {{
+        padding: 1.2rem 0.2rem 0 !important;
+        background: transparent !important;
+      }}
+      .login-foot {{
+        text-align: center; margin-top: 1.2rem;
+        font-size: 0.7rem; color: {COLORS['text_dim']}; line-height: 1.6;
+      }}
+      .login-warn {{
+        background: rgba(217,119,6,0.08);
+        border: 1px solid rgba(217,119,6,0.25);
+        border-left: 4px solid {COLORS['warn']};
+        border-radius: 8px;
+        padding: 0.7rem 0.9rem;
+        font-size: 0.78rem; color: {COLORS['text_mid']};
+        margin: 0.8rem 0 1rem;
+      }}
+      .login-card .stTextInput input,
+      .login-card .stNumberInput input {{
+        background: {COLORS['panel2']} !important;
+        border: 1px solid {COLORS['border']} !important;
+        border-radius: 8px !important;
+        color: {COLORS['text']} !important;
+        -webkit-text-fill-color: {COLORS['text']} !important;
+      }}
+      .login-card .stTextInput label,
+      .login-card .stNumberInput label,
+      .login-card .stCheckbox label {{
+        font-size: 0.72rem !important;
+        color: {COLORS['text_dim']} !important;
+        text-transform: uppercase !important;
+        letter-spacing: 0.06em !important;
+        font-weight: 600 !important;
+      }}
+    </style>
+    """, unsafe_allow_html=True)
+
+
+def login_screen():
+    """Mock login. On success, sets st.session_state['auth_stage'] = 'intake'."""
+    _login_css()
+
+    st.markdown(f"""
+    <div class="login-wrap">
+      <div class="login-hero">
+        <div class="heart">🫀</div>
+        <div class="tag">HRV ANALYSIS · v1.0</div>
+        <h1>AFibAI</h1>
+        <div class="sub">
+          Sign in to access the Atrial Fibrillation screening tool.<br>
+          New here? Create an account to get started.
+        </div>
+      </div>
+    </div>
+    """, unsafe_allow_html=True)
+
+    st.markdown('<div class="login-wrap">', unsafe_allow_html=True)
+    st.markdown('<div class="login-card">', unsafe_allow_html=True)
+    st.markdown('<div class="login-tabs">', unsafe_allow_html=True)
+
+    tab_in, tab_up = st.tabs(["🔒  Sign In", "✨  Create Account"])
+
+    with tab_in:
+        st.markdown("<div style='height:0.4rem'></div>", unsafe_allow_html=True)
+        with st.form("login_form", clear_on_submit=False):
+            li_user = st.text_input("Username", placeholder="e.g. jane.doe",
+                                     key="li_user")
+            li_pass = st.text_input("Password", type="password",
+                                     placeholder="Enter your password", key="li_pass")
+            st.markdown("<div style='height:0.4rem'></div>", unsafe_allow_html=True)
+            submitted = st.form_submit_button("Log In", use_container_width=True)
+            if submitted:
+                if not li_user.strip() or not li_pass.strip():
+                    st.error("Please enter both a username and a password.")
+                else:
+                    st.session_state["auth_user"] = li_user.strip()
+                    st.session_state["auth_stage"] = "intake"
+                    st.rerun()
+
+    with tab_up:
+        st.markdown("<div style='height:0.4rem'></div>", unsafe_allow_html=True)
+        with st.form("signup_form", clear_on_submit=False):
+            su_user = st.text_input("Choose a username", placeholder="e.g. jane.doe",
+                                     key="su_user")
+            su_pass = st.text_input("Choose a password", type="password",
+                                     placeholder="At least 6 characters", key="su_pass")
+            su_conf = st.text_input("Confirm password", type="password",
+                                     placeholder="Re-enter your password", key="su_conf")
+            st.markdown("<div style='height:0.4rem'></div>", unsafe_allow_html=True)
+            submitted = st.form_submit_button("Create Account", use_container_width=True)
+            if submitted:
+                u = su_user.strip()
+                if not u or not su_pass:
+                    st.error("Username and password are required.")
+                elif len(su_pass) < 6:
+                    st.error("Password must be at least 6 characters.")
+                elif su_pass != su_conf:
+                    st.error("Passwords do not match.")
+                else:
+                    st.session_state["auth_user"] = u
+                    st.session_state["auth_stage"] = "intake"
+                    st.rerun()
+
+    st.markdown('</div>', unsafe_allow_html=True)  # /.login-tabs
+    st.markdown('</div>', unsafe_allow_html=True)  # /.login-card
+    st.markdown(f"""
+      <div class="login-foot">
+        🔒 This is a research prototype. Accounts are not stored on a server<br>
+        and no data leaves your browser session.
+      </div>
+    </div>
+    """, unsafe_allow_html=True)
+
+
+def medical_intake_screen():
+    """Step 2: collect just Full Name and Age before unlocking the main app.
+    Mock — values are stored in session state only."""
+    _login_css()
+
+    user = st.session_state.get("auth_user", "User")
+    st.markdown(f"""
+    <div class="login-wrap">
+      <div class="login-hero">
+        <div class="heart">🫀</div>
+        <div class="tag">STEP 2 OF 2</div>
+        <h1>About You</h1>
+        <div class="sub">
+          Welcome, <b>{user}</b>. Please share two quick details<br>
+          so we can label your results.
+        </div>
+      </div>
+    </div>
+    """, unsafe_allow_html=True)
+
+    st.markdown('<div class="login-wrap">', unsafe_allow_html=True)
+    st.markdown('<div class="login-card">', unsafe_allow_html=True)
+
+    st.markdown(f"""
+      <div class="login-warn">
+        ⚠️ The information below stays in this browser session only.<br>
+        AFibAI is a research prototype, not a medical device.
+      </div>
+    """, unsafe_allow_html=True)
+
+    with st.form("intake_form", clear_on_submit=False):
+        full_name = st.text_input("Full Name", placeholder="e.g. Jane Doe",
+                                   key="mi_name")
+        age = st.number_input("Age (years)", min_value=0, max_value=120,
+                               value=30, step=1, key="mi_age")
+
+        st.markdown("<div style='height:0.6rem'></div>", unsafe_allow_html=True)
+        agreed = st.checkbox("I understand this is a research tool, not a medical device.",
+                              key="mi_agree")
+        st.markdown("<div style='height:0.4rem'></div>", unsafe_allow_html=True)
+        c1, c2 = st.columns([1, 1])
+        with c1:
+            back = st.form_submit_button("← Back", use_container_width=True)
+        with c2:
+            submit = st.form_submit_button("Submit & Enter  →", use_container_width=True)
+
+    if back:
+        for k in ("auth_stage", "auth_user"):
+            st.session_state.pop(k, None)
+        st.rerun()
+
+    if submit:
+        if not agreed:
+            st.error("Please confirm that you understand the research-prototype notice.")
+        elif not full_name.strip():
+            st.error("Please enter your full name.")
+        else:
+            st.session_state["auth_user_data"] = {
+                "full_name": full_name.strip(),
+                "age": int(age),
+            }
+            st.session_state["authenticated"] = True
+            st.rerun()
+
+    st.markdown('</div>', unsafe_allow_html=True)  # /.login-card
+    st.markdown('</div>', unsafe_allow_html=True)  # /.login-wrap
+
+
+# ═══════════════════════════════════════════════════════════════════════════
 # MAIN
 # ═══════════════════════════════════════════════════════════════════════════
 
@@ -1137,4 +1381,12 @@ def main():
 
 
 if __name__ == "__main__":
+    # Auth gate: not logged in → login screen; logged in but no intake →
+    # medical-info screen; fully authenticated → main app.
+    if not st.session_state.get("authenticated", False):
+        if st.session_state.get("auth_stage") == "intake":
+            medical_intake_screen()
+        else:
+            login_screen()
+        st.stop()
     main()
