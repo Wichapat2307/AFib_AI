@@ -12,3 +12,5 @@ torchvision
 gdown
 wfdb
 requests
+streamlit-autorefresh
+bcrypt
