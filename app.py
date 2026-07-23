@@ -21,6 +21,11 @@ import plotly.graph_objects as go
 from pathlib import Path
 import io, pickle, time, json, urllib.request, urllib.error
 
+import auth  # real SQLite + bcrypt auth (replaces the mock login)
+
+# Initialize database + seed the admin account (idempotent).
+auth.init_db()
+
 try:
     import joblib
     JOBLIB_AVAILABLE = True
@@ -702,6 +707,211 @@ def plot_radar(features):
 # LOGIN / REGISTRATION GATE  (mock auth — no real password check, no DB)
 # ═══════════════════════════════════════════════════════════════════════════
 
+# ═══════════════════════════════════════════════════════════════════════════
+# LICENSE AGREEMENT  (Thai + English)
+# ═══════════════════════════════════════════════════════════════════════════
+
+LICENSE_THAI = (
+"ซอฟต์แวร์นี้เป็นผลงานที่พัฒนาขึ้นโดย นายวิชญ์พัศ โสทรทวีพงศ์ "
+"นายพีระวิทย์ ประสิทธิ์ผล และ นางสาวกานต์พิชชา มุขแก้ว "
+"จาก โรวเรียนวารีเชียงใหม่ ภายใต้การดูแลของ นาย สรพงษ์ สมสอน "
+"ภายใต้โครงการ ระบบตรวจจับภาวะหัวใจห้องบนสั่นพลิ้วจากสัญญาณ ECG ด้วยปัญญาประดิษฐ์ (AFib AI)  "
+"ซึ่งสนับสนุนโดย สำนักงานพัฒนาวิทยาศาสตร์และเทคโนโลยีแห่งชาติ "
+"โดยมีวัตถุประสงค์เพื่อส่งเสริมให้นักเรียนและนักศึกษาได้เรียนรู้และฝึกทักษะในการพัฒนาซอฟต์แวร์ "
+"ลิขสิทธิ์ของซอฟต์แวร์นี้จึงเป็นของผู้พัฒนา ซึ่งผู้พัฒนาได้อนุญาตให้สำนักงานพัฒนาวิทยาศาสตร์และเทคโนโลยีแห่งชาติ "
+"เผยแพร่ซอฟต์แวร์นี้ตาม \"ต้นฉบับ\" โดยไม่มีการแก้ไขดัดแปลงใด ๆ ทั้งสิ้น "
+"ให้แก่บุคคลทั่วไปได้ใช้เพื่อประโยชน์ส่วนบุคคลหรือประโยชน์ทางการศึกษาที่ไม่มีวัตถุประสงค์ในเชิงพาณิชย์ "
+"โดยไม่คิดค่าตอบแทนการใช้ซอฟต์แวร์ "
+"ดังนั้น สำนักงานพัฒนาวิทยาศาสตร์และเทคโนโลยีแห่งชาติ "
+"จึงไม่มีหน้าที่ในการดูแล บำรุงรักษา จัดการอบรมการใช้งาน หรือพัฒนาประสิทธิภาพซอฟต์แวร์ "
+"รวมทั้งไม่รับรองความถูกต้องหรือประสิทธิภาพการทำงานของซอฟต์แวร์ "
+"ตลอดจนไม่รับประกันความเสียหายต่าง ๆ อันเกิดจากการใช้ซอฟต์แวร์ทั้งสิ้น"
+)
+
+LICENSE_ENGLISH = (
+"This software is a work developed by Mr.Wichapat Sothorntweepong, "
+"Mr.Peerawit Prasitphon and Ms.Kanpitcha Mookkaew from Varee Chiangmai School "
+"under the provision of Mr. Sorapong Somsorn under AI-Based Atrial Fibrillation "
+"Detection System Using ECG Signals (AFib AI) , which has been supported by the "
+"National Science and Technology Development Agency (NSTDA), in order to encourage "
+"pupils and students to learn and practice their skills in developing software. "
+"Therefore, the intellectual property of this software shall belong to the developer "
+"and the developer gives NSTDA a permission to distribute this software as an \"as is\" "
+"and non-modified software for a temporary and non-exclusive use without remuneration "
+"to anyone for his or her own purpose or academic purposes, which are not commercial "
+"purposes. In this connection, NSTDA shall not be responsible to the user for taking "
+"care, maintaining, training, or developing the efficiency of this software. Moreover, "
+"NSTDA shall not be liable for any error, software efficiency and damages in connection "
+"with or arising out of the use of the software."
+)
+
+def _agreement_css():
+    """Extra CSS for the license agreement screen + the in-app agreement dialog."""
+    st.markdown(f"""
+    <style>
+      .agreement-wrap {{
+        max-width: 760px; margin: 2.5rem auto 2rem; padding: 0 1.5rem;
+      }}
+      .agreement-hero {{
+        text-align: center; margin-bottom: 1.2rem;
+      }}
+      .agreement-hero .heart {{
+        font-size: 2.4rem; line-height: 1; margin-bottom: 8px;
+      }}
+      .agreement-hero h1 {{
+        font-family: 'Sora', sans-serif; font-size: 1.7rem; font-weight: 700;
+        color: {COLORS['text']}; margin: 0 0 4px;
+      }}
+      .agreement-hero .tag {{
+        font-family: 'JetBrains Mono', monospace; font-size: 0.62rem;
+        color: {COLORS['text_dim']}; letter-spacing: 0.18em;
+        text-transform: uppercase; margin-bottom: 6px;
+      }}
+      .agreement-hero .sub {{
+        font-size: 0.82rem; color: {COLORS['text_mid']}; line-height: 1.5;
+        max-width: 520px; margin: 0 auto;
+      }}
+      .agreement-card {{
+        background: {COLORS['panel']};
+        border: 1px solid {COLORS['border']};
+        border-radius: 14px;
+        padding: 1.6rem 1.8rem;
+        box-shadow: 0 1px 0 rgba(255,255,255,0.6) inset, 0 6px 24px rgba(20,40,30,0.04);
+      }}
+      .agreement-section-title {{
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 0.7rem;
+        font-weight: 700;
+        letter-spacing: 0.1em;
+        text-transform: uppercase;
+        color: {COLORS['accent2']};
+        margin: 0 0 0.5rem;
+        padding-bottom: 0.35rem;
+        border-bottom: 1px solid {COLORS['border']};
+      }}
+      .agreement-section-title + .agreement-section-title {{ margin-top: 1.2rem; }}
+      .agreement-body {{
+        font-size: 0.85rem;
+        line-height: 1.75;
+        color: {COLORS['text']};
+        text-align: justify;
+        white-space: pre-wrap;
+        max-height: 320px;
+        overflow-y: auto;
+        padding: 0.6rem 0.4rem 0.6rem 0.2rem;
+        background: {COLORS['panel2']};
+        border: 1px solid {COLORS['border']};
+        border-radius: 8px;
+      }}
+      .agreement-body::-webkit-scrollbar {{ width: 6px; }}
+      .agreement-body::-webkit-scrollbar-thumb {{ background: {COLORS['border_light']}; border-radius: 3px; }}
+      .agreement-foot {{
+        text-align: center; margin-top: 1.2rem;
+        font-size: 0.7rem; color: {COLORS['text_dim']}; line-height: 1.6;
+      }}
+      /* When the agreement is shown inside an st.dialog, hide our custom
+         wrapper centering (the dialog already centers its own content). */
+      [data-testid="stDialog"] .agreement-wrap {{ max-width: 100%; margin: 0; padding: 0; }}
+      [data-testid="stDialog"] .agreement-hero {{ text-align: left; margin-bottom: 0.8rem; }}
+      [data-testid="stDialog"] .agreement-hero .heart {{ display: none; }}
+      [data-testid="stDialog"] .agreement-card {{ box-shadow: none; padding: 1rem 0; border: none; background: transparent; }}
+      [data-testid="stDialog"] .agreement-body {{ max-height: 50vh; }}
+    </style>
+    """, unsafe_allow_html=True)
+
+
+def _render_agreement_body(*, show_titles: bool = True):
+    """Renders the Thai + English agreement text. Used by both the
+    pre-login agreement screen and the in-app sidebar dialog."""
+    if show_titles:
+        st.markdown(
+            '<div class="agreement-section-title">ข้อตกลงการใช้ซอฟต์แวร์ (ภาษาไทย)</div>',
+            unsafe_allow_html=True,
+        )
+    st.markdown(
+        f'<div class="agreement-body">{LICENSE_THAI}</div>',
+        unsafe_allow_html=True,
+    )
+    if show_titles:
+        st.markdown(
+            '<div class="agreement-section-title">License Agreement (English)</div>',
+            unsafe_allow_html=True,
+        )
+    st.markdown(
+        f'<div class="agreement-body">{LICENSE_ENGLISH}</div>',
+        unsafe_allow_html=True,
+    )
+
+
+def license_agreement_screen():
+    """Step 0: shown before the login screen. User must click 'Next'
+    to proceed to sign-in. Pure UI gate — acceptance isn't stored
+    anywhere, the user can re-open the agreement from the sidebar."""
+    _agreement_css()
+
+    st.markdown(f"""
+    <div class="agreement-wrap">
+      <div class="agreement-hero">
+        <div class="heart">🫀</div>
+        <div class="tag">BEFORE YOU BEGIN</div>
+        <h1>License Agreement</h1>
+        <div class="sub">
+          Please read the software license agreement below before continuing<br>
+          to the AFibAI application.
+        </div>
+      </div>
+    </div>
+    """, unsafe_allow_html=True)
+
+    st.markdown('<div class="agreement-wrap">', unsafe_allow_html=True)
+    st.markdown('<div class="agreement-card">', unsafe_allow_html=True)
+    _render_agreement_body(show_titles=True)
+    st.markdown('</div>', unsafe_allow_html=True)  # /.agreement-card
+
+    st.markdown("<div style='height:0.4rem'></div>", unsafe_allow_html=True)
+    _spacer_l, _btn_c, _spacer_r = st.columns([1, 1, 1])
+    with _btn_c:
+        if st.button("Next  →", key="agreement_next", use_container_width=True):
+            st.session_state["agreement_accepted"] = True
+            st.rerun()
+
+    st.markdown(f"""
+      <div class="agreement-foot">
+        Clicking <b>Next</b> indicates that you have read and acknowledge<br>
+        the license terms above.
+      </div>
+    </div>
+    """, unsafe_allow_html=True)
+
+
+@st.dialog("ข้อตกลง / License Agreement", width="large")
+def _show_agreement_dialog():
+    """In-app dialog opened from the sidebar. Shows the same text and
+    closes when the user clicks 'OK'."""
+    _agreement_css()
+    st.markdown(
+        '<div class="agreement-section-title">ข้อตกลงการใช้ซอฟต์แวร์ (ภาษาไทย)</div>',
+        unsafe_allow_html=True,
+    )
+    st.markdown(
+        f'<div class="agreement-body">{LICENSE_THAI}</div>',
+        unsafe_allow_html=True,
+    )
+    st.markdown(
+        '<div class="agreement-section-title">License Agreement (English)</div>',
+        unsafe_allow_html=True,
+    )
+    st.markdown(
+        f'<div class="agreement-body">{LICENSE_ENGLISH}</div>',
+        unsafe_allow_html=True,
+    )
+    st.markdown("<div style='height:0.6rem'></div>", unsafe_allow_html=True)
+    _ok_l, _ok_c, _ok_r = st.columns([1, 1, 1])
+    with _ok_c:
+        if st.button("OK", key="agreement_ok", use_container_width=True):
+            st.rerun()
+
+
 def _login_css():
     """Extra CSS for the login + medical-info screen. Reuses the AFibAI palette."""
     st.markdown(f"""
@@ -1094,6 +1304,14 @@ def main():
             st.markdown(f'<div class="cs-badge">{dot} {name}</div>', unsafe_allow_html=True)
 
         st.divider()
+        st.markdown(f'<div class="cs-label">Legal</div>', unsafe_allow_html=True)
+        if st.button("📄  ข้อตกลง / Agreement",
+                      key="sidebar_open_agreement",
+                      use_container_width=True,
+                      help="View the software license agreement."):
+            _show_agreement_dialog()
+
+        st.divider()
         st.markdown(f"""
         <div style='font-size:0.6rem; color:{COLORS["text_dim"]}; line-height:1.8;'>
           ⚠️ Research tool only.<br>Not a certified medical device.<br>Consult a physician for diagnosis.
@@ -1440,8 +1658,14 @@ def main():
 
 
 if __name__ == "__main__":
-    # Auth gate: not logged in → login screen; logged in but no intake →
-    # medical-info screen; fully authenticated → main app.
+    # Auth gate, in order:
+    #   1. License agreement not yet acknowledged → agreement screen
+    #   2. Not logged in                                  → login screen
+    #   3. Logged in but no intake                        → medical-info screen
+    #   4. Fully authenticated                            → main app.
+    if not st.session_state.get("agreement_accepted", False):
+        license_agreement_screen()
+        st.stop()
     if not st.session_state.get("authenticated", False):
         if st.session_state.get("auth_stage") == "intake":
             medical_intake_screen()
