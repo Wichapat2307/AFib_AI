@@ -1,0 +1,27 @@
+{
+  "week": 8,
+  "title": "Deployment — Streamlit Application",
+  "status": "completed",
+  "summary": "Built and deployed an interactive Streamlit application for AFib detection with real-time signal processing and explainability features.",
+  "completed_tasks": [
+    "Built Streamlit app integrating the best-performing model from Week 7",
+    "Implemented full preprocessing pipeline inside the app (bandpass filter, resample to 128 Hz, normalize, 30s windows)",
+    "Added live ECG signal input support",
+    "Displayed AFib probability (%) as primary output",
+    "Integrated SHAP-based explainability visualization for model interpretability",
+    "Deployed application on Streamlit Community Cloud",
+    "Linked GitHub repository: https://github.com/Wichapat900/AFib_detection"
+  ],
+  "app_features": [
+    "ECG signal upload or live stream input",
+    "Real-time preprocessing pipeline",
+    "AFib probability score (%)",
+    "SHAP explainability chart",
+    "Explainable AI visualization"
+  ],
+  "deployment": {
+    "platform": "Streamlit Community Cloud",
+    "repository": "https://github.com/Wichapat900/AFib_detection"
+  },
+  "project_complete": true
+}

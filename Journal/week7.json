@@ -1,0 +1,45 @@
+{
+  "week": 7,
+  "title": "Evaluation — Cross-Validation with Full MITBIH Dataset",
+  "status": "completed",
+  "summary": "Used the full MIT-BIH Atrial Fibrillation Database as an independent cross-validation set to evaluate models trained on LTAFDB. Compared multiple model architectures.",
+  "completed_tasks": [
+    "Applied full preprocessing pipeline to all 22 MITBIH records (bandpass filter, resample 250→128 Hz, normalize, 30s windows)",
+    "Used MITBIH dataset as independent cross-validation set (no overlap with LTAFDB training data)",
+    "Trained and evaluated models: XGBoost, Random Forest, CNN, LSTM, CNN+LSTM hybrid",
+    "Computed evaluation metrics: accuracy, precision, recall, F1-score, AUC-ROC",
+    "Analyzed model performance across both LTAFDB test split and MITBIH cross-validation set",
+    "Identified best-performing model architecture for deployment"
+  ],
+  "models_compared": [
+    "XGBoost (XGB)",
+    "Random Forest (RF)",
+    "CNN",
+    "LSTM",
+    "CNN + LSTM Hybrid"
+  ],
+  "evaluation_sets": [
+    {
+      "name": "LTAFDB test split",
+      "type": "held-out 20% patient-level split",
+      "records": 15
+    },
+    {
+      "name": "MITBIH AFDB",
+      "type": "independent cross-validation",
+      "records": 22
+    }
+  ],
+  "metrics_used": ["accuracy", "precision", "recall", "F1-score", "AUC-ROC"],
+  "next_week_plan": {
+    "week": 8,
+    "focus": "Deployment — build and launch Streamlit application",
+    "goals": [
+      "Build interactive Streamlit app for real-time AFib detection",
+      "Integrate best-performing model from Week 7 evaluation",
+      "Implement live ECG signal input and preprocessing pipeline in-app",
+      "Display AFib probability output and SHAP-based explainability visualization",
+      "Deploy app publicly via Streamlit Community Cloud"
+    ]
+  }
+}

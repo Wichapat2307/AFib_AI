@@ -1,0 +1,52 @@
+{
+  "week": 5,
+  "title": "Record Inspection & Data Visualization",
+  "status": "completed",
+  "summary": "Finalized MITBIH record list, documented file formats, and reviewed LTAFDB dataset structure including all 75 records and their annotation types.",
+  "completed_tasks": [
+    "Finalized 22 usable MITBIH records",
+    "Moved 04043 from caution to excluded (bad blocks confirmed)",
+    "Added 05091, 08465, 08475 back into the usable set after re-inspection",
+    "Documented ECG file types: .dat (raw signal), .hea (metadata), .atr (annotations), .qrs (R-peaks)",
+    "Reviewed all 75 LTAFDB records: sampling frequency 128 Hz, 2 leads, signal length 2.8M–12.1M samples",
+    "Catalogued LTAFDB annotation symbols: N, A, V, Q, +, and rhythm labels including (AFIB, (N, (VT, (SBR, (SVTA, (AB, (B, (T, (IVR",
+    "Excluded LTAFDB record 00 (insufficient/corrupted data)",
+    "Confirmed binary label mapping for LTAFDB: (AFIB → AFib, (N → Normal"
+  ],
+  "mitbih_final_records": ["04015","04048","04126","04746","04908","04936","05091","05121","05261","06426","06453","06995","07162","07859","07879","07910","08215","08219","08378","08455","08465","08475"],
+  "mitbih_excluded_final": {
+    "00735": "Signal unavailable",
+    "03665": "Signal unavailable",
+    "08405": "Unreadable data blocks",
+    "08434": "Unreadable data blocks",
+    "04043": "Bad blocks"
+  },
+  "ltafdb_summary": {
+    "total_records_reviewed": 75,
+    "excluded": ["00"],
+    "exclusion_reason": "Corrupted / insufficient data",
+    "sampling_frequency_hz": 128,
+    "n_leads": 2,
+    "units": "mV",
+    "duration_range_hours": "6.13 – 26.35",
+    "annotation_symbols": ["N", "A", "V", "Q", "+"],
+    "rhythm_labels": ["(AFIB","(N","(VT","(SBR","(SVTA","(AB","(B","(T","(IVR","Aux","MISSB","PSE","M","MB"]
+  },
+  "file_format_reference": {
+    ".dat": "Raw ECG waveform data",
+    ".hea": "Metadata: record name, leads, sampling frequency, signal length, start time",
+    ".atr": "Rhythm annotations and beat labels",
+    ".qrs": "Detected R-peak locations"
+  },
+  "next_week_plan": {
+    "week": 6,
+    "focus": "Training split — segment LTAFDB into 80/20 train/test split",
+    "goals": [
+      "Apply 30-second windowing with 50% overlap to LTAFDB",
+      "Perform patient-level 80/20 train/test split on LTAFDB",
+      "Label each window as AFib or Normal based on dominant rhythm annotation",
+      "Document class distribution after splitting",
+      "Begin preprocessing pipeline: bandpass filter + resampling to 128 Hz"
+    ]
+  }
+}

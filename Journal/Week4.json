@@ -1,0 +1,56 @@
+{
+  "week": 4,
+  "title": "Dataset Discovery & Problem Framing",
+  "status": "completed",
+  "summary": "Identified data sources and defined the binary classification problem (AFib vs Normal). Assessed dataset characteristics and key challenges.",
+  "completed_tasks": [
+    "Selected MIT-BIH Atrial Fibrillation Database (physionet.org/content/afdb/1.0.0/) as primary dataset",
+    "Selected Long-Term Atrial Fibrillation Database (physionet.org/content/ltafdb/1.0.0/) as secondary dataset",
+    "Identified key challenges: differing sampling rates (128 Hz vs 250 Hz), long-duration recordings (10–25 hours), real-world noise",
+    "Defined binary classification target: AFib vs Normal",
+    "Mapped label scheme: AFib → (AFIB/AFIB, Normal → (N/N/(NSR/NSR",
+    "Decided to ignore Atrial Flutter (AFL) and Junctional Rhythm (J) labels",
+    "Identified excluded records: 00735, 03665 (signal unavailable), 08405, 08434 (unreadable blocks), 04043 (bad blocks, use with caution)"
+  ],
+  "datasets": {
+    "mitbih_afdb": {
+      "url": "https://physionet.org/content/afdb/1.0.0/",
+      "sampling_frequency_hz": 250,
+      "records_used": ["04015","04043","04048","04126","04746","04908","04936","05121","05261","06426","06453","06995","07162","07859","07879","07910","08215","08219","08378","08455"],
+      "records_excluded": ["00735","03665","08405","08434","08465","08475","05091"],
+      "records_caution": ["04043"],
+      "labels": {
+        "AFib": ["(AFIB", "AFIB"],
+        "Normal": ["(N", "N", "(NSR", "NSR"],
+        "ignored": ["(AFL", "AFL", "(J", "J"]
+      }
+    },
+    "ltafdb": {
+      "url": "https://physionet.org/content/ltafdb/1.0.0/",
+      "sampling_frequency_hz": 128,
+      "note": "Contains substantial noise and motion artifacts due to long-duration Holter recordings"
+    }
+  },
+  "planned_preprocessing_pipeline": [
+    "Bandpass filtering for noise reduction",
+    "Resampling to 128 Hz (unify both datasets)",
+    "Signal normalization",
+    "Window segmentation"
+  ],
+  "planned_input": "Live ECG signal stream",
+  "planned_output": [
+    "AFib probability (%)",
+    "SHAP-based explainability",
+    "Explainable AI visualization"
+  ],
+  "next_week_plan": {
+    "week": 5,
+    "focus": "Record inspection, exclusion finalization, and data visualization",
+    "goals": [
+      "Finalize MITBIH record inclusion/exclusion list",
+      "Visualize ECG signal samples per record",
+      "Document file structure (.dat, .hea, .atr, .qrs)",
+      "Review LTAFDB record summaries and annotation types"
+    ]
+  }
+}
