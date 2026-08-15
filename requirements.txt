@@ -16,3 +16,4 @@ streamlit-autorefresh
 bcrypt
 flask
 libsql-client
+gunicorn
