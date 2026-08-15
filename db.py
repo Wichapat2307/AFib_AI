@@ -36,10 +36,18 @@ def is_turso() -> bool:
 
 def _libsql_connect():
     """Open a libsql (Turso) connection. Uses the synchronous client so the
-    context manager below can yield values without async ceremony."""
+    context manager below can yield values without async ceremony.
+
+    Turso's documented scheme is `libsql://`, but libsql_client maps that to
+    `wss://` and tries a WebSocket upgrade that Turso's public endpoint
+    doesn't accept (returns 400 on the handshake). We normalise to `https://`
+    so libsql_client takes the plain-HTTPS code path, which Turso does accept.
+    """
     from libsql_client import create_client_sync
     url   = os.environ["TURSO_URL"]
     token = os.environ["TURSO_TOKEN"]
+    if url.startswith("libsql://"):
+        url = "https://" + url[len("libsql://"):]
     return create_client_sync(url=url, auth_token=token)
 
 
