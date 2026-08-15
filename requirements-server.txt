@@ -1,0 +1,7 @@
+# Minimal requirements for server.py (Flask data-relay only).
+# Render uses this; Streamlit Community Cloud keeps using requirements.txt
+# because app.py needs the full ML stack.
+
+flask
+gunicorn
+libsql-client
