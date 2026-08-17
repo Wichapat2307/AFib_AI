@@ -354,6 +354,29 @@ def detect_rpeaks(signal, fs=FS):
         peaks, _ = find_peaks(sig, height=max(0.2, sig_max*0.2), distance=int(0.3*fs))
     return peaks
 
+def estimate_signal_quality(signal, fs=FS):
+    """Lightweight heuristic signal-quality score, used by both the patient
+    and doctor views ("GOOD" / "WEAK" / "POOR"). Not a validated clinical
+    metric — just enough to warn the patient if a recording is unusable."""
+    duration_s = len(signal) / fs if fs else 0.0
+    if duration_s <= 0:
+        return "POOR", 0.0
+    peaks = detect_rpeaks(signal, fs)
+    if len(peaks) < 2:
+        return "POOR", 0.0
+    rr = np.diff(peaks) / fs * 1000
+    valid = rr[(rr > 250) & (rr < 2000)]
+    coverage = len(valid) / max(len(rr), 1)
+    expected_beats = duration_s * (60.0 / 90.0)  # loose baseline expectation
+    detect_ratio = min(len(peaks) / max(expected_beats, 1e-6), 1.5)
+    score = coverage * 0.7 + min(detect_ratio, 1.0) * 0.3
+    if score >= 0.75:
+        return "GOOD", score
+    elif score >= 0.45:
+        return "WEAK", score
+    return "POOR", score
+
+
 def extract_hrv(signal, fs=FS):
     peaks = detect_rpeaks(signal, fs)
     rr = np.diff(peaks) / fs * 1000
@@ -599,6 +622,38 @@ def run_prediction(model_choice, features, silent=False):
         method_note = "HRV heuristic"
 
     return label, prob, threshold, method_note, reasons, individual_preds
+
+
+def compute_quick_result(signal, fs=FS, model_choice="Ensemble"):
+    """Run HRV extraction + prediction on a signal and return a flat dict
+    used by the patient Home/Result/Why-flagged screens. Silent (no
+    st.warning spam) since patients shouldn't see model-loading messages."""
+    features = extract_hrv(signal, fs)
+    feat = dict(zip(FEATURE_NAMES, features))
+    peaks = detect_rpeaks(signal, fs)
+    label, prob, threshold, method_note, reasons, individual_preds = run_prediction(
+        model_choice, features, silent=True
+    )
+    if reasons is None:
+        # Model-based prediction has no HRV heuristic breakdown — build a
+        # patient-friendly one anyway so "Why was this flagged?" always has
+        # something to show.
+        _, _, _, reasons = hrv_heuristic(features)
+    quality, quality_score = estimate_signal_quality(signal, fs)
+    return {
+        "label": label,
+        "prob": prob,
+        "threshold": threshold,
+        "method_note": method_note,
+        "reasons": reasons,
+        "hr": feat.get("mean_hr", 0.0),
+        "rmssd": feat.get("rmssd", 0.0),
+        "sdnn": feat.get("sdnn", 0.0),
+        "quality": quality,
+        "quality_score": quality_score,
+        "peaks": peaks,
+        "n_peaks": len(peaks),
+    }
 
 # ═══════════════════════════════════════════════════════════════════════════
 # PLOTS  — all use AFibAI palette
@@ -1074,7 +1129,9 @@ def _login_css():
 
 
 def login_screen():
-    """Mock login. On success, sets st.session_state['auth_stage'] = 'intake'."""
+    """Real login/signup via auth.py. On success, routes to the intake
+    screen for patients, or straight into the app for clinicians (doctors
+    don't need to fill in their own medical history)."""
     _login_css()
 
     st.markdown(f"""
@@ -1116,8 +1173,18 @@ def login_screen():
                     else:
                         st.session_state["auth_user"] = user["username"]
                         st.session_state["auth_user_id"] = user["id"]
-                        st.session_state["auth_role"] = user.get("role", auth.ROLE_CLINICIAN)
-                        st.session_state["auth_stage"] = "intake"
+                        role = user.get("role", auth.ROLE_CLINICIAN)
+                        st.session_state["auth_role"] = role
+                        if role == auth.ROLE_CLINICIAN:
+                            # Doctors/clinicians skip the personal medical
+                            # intake form entirely — it's only relevant for
+                            # patients recording their own ECG.
+                            st.session_state["auth_user_data"] = {
+                                "full_name": user["username"], "role": "clinician",
+                            }
+                            st.session_state["authenticated"] = True
+                        else:
+                            st.session_state["auth_stage"] = "intake"
                         st.rerun()
 
     with tab_up:
@@ -1157,8 +1224,16 @@ def login_screen():
                         if ok2 and user:
                             st.session_state["auth_user"] = user["username"]
                             st.session_state["auth_user_id"] = user["id"]
-                            st.session_state["auth_role"] = user.get("role", auth.ROLE_CLINICIAN)
-                            st.session_state["auth_stage"] = "intake"
+                            role = user.get("role", auth.ROLE_CLINICIAN)
+                            st.session_state["auth_role"] = role
+                            if role == auth.ROLE_CLINICIAN:
+                                # Same skip for freshly-created doctor accounts.
+                                st.session_state["auth_user_data"] = {
+                                    "full_name": user["username"], "role": "clinician",
+                                }
+                                st.session_state["authenticated"] = True
+                            else:
+                                st.session_state["auth_stage"] = "intake"
                             st.rerun()
                         else:
                             st.success("Account created. Please sign in.")
@@ -1176,8 +1251,9 @@ def login_screen():
 
 def medical_intake_screen():
     """Step 2: collect basic medical / demographic info before unlocking the
-    main app. There's a Skip button at the top right that bypasses the form.
-    Mock — values are stored in session state only."""
+    main app. Patients only — clinicians skip this screen entirely (see
+    login_screen). There's a Skip button at the top right that bypasses the
+    form. Mock — values are stored in session state only."""
     _login_css()
 
     user = st.session_state.get("auth_user", "User")
@@ -1369,33 +1445,289 @@ def _patient_css():
       .patient-history-row {{
         background: {COLORS['panel']}; border: 1px solid {COLORS['border']};
         border-radius: 10px; padding: 0.8rem 1rem; margin: 0.5rem 0;
-        font-family: 'JetBrains Mono', monospace; font-size: 0.8rem;
-        color: {COLORS['text']};
+        font-family: 'Inter', sans-serif; font-size: 0.82rem;
+        color: {COLORS['text']}; display:flex; justify-content:space-between;
+        align-items:center; gap: 0.6rem;
+      }}
+      .patient-history-row .meta {{
+        font-family: 'JetBrains Mono', monospace; font-size: 0.72rem;
+        color: {COLORS['text_dim']};
+      }}
+      .patient-history-row .pill {{
+        font-size: 0.65rem; font-weight: 700; letter-spacing: 0.05em;
+        padding: 3px 9px; border-radius: 999px; text-transform: uppercase;
+        white-space: nowrap;
+      }}
+
+      /* ── Bottom navigation bar ─────────────────────────────────────── */
+      .patient-navbar {{
+        position: sticky; bottom: 0; left: 0; right: 0;
+        background: {COLORS['panel']}; border-top: 1px solid {COLORS['border']};
+        margin: 1rem -1rem -1rem -1rem; padding: 0.4rem 0.4rem calc(0.4rem + env(safe-area-inset-bottom));
+        box-shadow: 0 -4px 14px rgba(0,0,0,0.05); z-index: 999;
+      }}
+      .patient-navbar .stButton>button {{
+        border: none !important; background: transparent !important;
+        border-radius: 10px !important; padding: 0.5rem 0.2rem !important;
+        font-size: 0.68rem !important; font-weight: 600 !important;
+        color: {COLORS['text_dim']} !important; width: 100%;
+        text-transform: uppercase; letter-spacing: 0.04em;
+      }}
+      .patient-navbar .nav-active button {{
+        background: {COLORS['panel2']} !important; color: {COLORS['accent']} !important;
+      }}
+
+      /* ── Result / status banner ────────────────────────────────────── */
+      .patient-banner {{
+        border-radius: 14px; padding: 1.3rem 1.4rem; text-align: center;
+        margin: 0.6rem 0 1rem; border: 1px solid;
+      }}
+      .patient-banner.ok {{
+        background: rgba(21,128,61,0.08); border-color: {COLORS['success']};
+      }}
+      .patient-banner.review {{
+        background: rgba(220,38,38,0.08); border-color: {COLORS['danger']};
+      }}
+      .patient-banner .headline {{
+        font-family: 'Sora', sans-serif; font-size: 1.4rem; font-weight: 700;
+        letter-spacing: 0.02em;
+      }}
+      .patient-banner.ok .headline {{ color: {COLORS['success']}; }}
+      .patient-banner.review .headline {{ color: {COLORS['danger']}; }}
+      .patient-banner .desc {{
+        font-size: 0.82rem; color: {COLORS['text_mid']}; margin-top: 6px;
+        line-height: 1.5;
+      }}
+
+      .patient-metric-row {{ display:flex; gap:0.6rem; margin: 0.6rem 0; }}
+      .patient-metric {{
+        flex:1; background: {COLORS['panel']}; border:1px solid {COLORS['border']};
+        border-radius: 10px; padding: 0.7rem 0.5rem; text-align:center;
+      }}
+      .patient-metric .v {{
+        font-family:'JetBrains Mono', monospace; font-size:1.15rem;
+        font-weight:700; color:{COLORS['text']};
+      }}
+      .patient-metric .l {{
+        font-size:0.65rem; color:{COLORS['text_dim']}; text-transform:uppercase;
+        letter-spacing:0.06em; margin-top:2px;
+      }}
+
+      .patient-factor {{
+        background:{COLORS['panel2']}; border-radius:8px; padding:0.6rem 0.8rem;
+        margin:0.4rem 0; font-size:0.82rem; color:{COLORS['text']};
+      }}
+      .patient-section-title {{
+        font-size: 0.72rem; color:{COLORS['text_dim']}; text-transform:uppercase;
+        letter-spacing:0.08em; margin: 1rem 0 0.4rem; font-weight:700;
       }}
     </style>
     """, unsafe_allow_html=True)
 
 
-def patient_view():
-    """Phone-friendly patient UI: big buttons for record/alert/history.
+def _patient_load_result(recording_id: int):
+    """Load a saved recording and compute its quick result, cached in
+    session_state so switching screens doesn't reprocess the signal."""
+    cache = st.session_state.setdefault("patient_result_cache", {})
+    if recording_id in cache:
+        return cache[recording_id]
+    signal, meta = load_recording_from_server(recording_id)
+    if signal is None or len(signal) == 0:
+        return None
+    fs = int((meta or {}).get("fs") or FS)
+    result = compute_quick_result(signal, fs)
+    result["signal"] = signal
+    result["fs"] = fs
+    result["meta"] = meta
+    cache[recording_id] = result
+    return result
 
-    The patient never sees charts or model output — just three actions.
-    All the analysis happens on the clinician's view in parallel.
-    """
-    _patient_css()
 
+def _patient_banner(label: str, prob: float):
+    is_afib = label == "AFib"
+    cls = "review" if is_afib else "ok"
+    headline = "POSSIBLE AFib" if is_afib else "NORMAL"
+    desc = (
+        "Possible irregular rhythm detected. Consider sharing this with your doctor."
+        if is_afib else
+        "No abnormal rhythm detected in this recording."
+    )
+    st.markdown(f"""
+    <div class="patient-banner {cls}">
+      <div class="headline">{headline}</div>
+      <div class="desc">{desc}</div>
+    </div>
+    """, unsafe_allow_html=True)
+
+
+def _patient_metrics_row(prob, hr, quality):
+    st.markdown(f"""
+    <div class="patient-metric-row">
+      <div class="patient-metric"><div class="v">{prob*100:.0f}%</div><div class="l">AFib Prob.</div></div>
+      <div class="patient-metric"><div class="v">{hr:.0f}</div><div class="l">Heart Rate</div></div>
+      <div class="patient-metric"><div class="v">{quality}</div><div class="l">Signal</div></div>
+    </div>
+    """, unsafe_allow_html=True)
+
+
+def _patient_result_screen(recording_id: int):
+    """PATIENT — RESULT screen. Shown after a recording, or tapped from
+    Home/History. Deliberately avoids raw HRV numbers/charts up front —
+    those live behind 'View ECG' / 'Why was this flagged?'."""
+    result = _patient_load_result(recording_id)
+    if result is None:
+        st.error("Couldn't load that recording. It may still be processing.")
+        if st.button("← Back", key="result_back_err"):
+            st.session_state["patient_result_id"] = None
+            st.rerun()
+        return
+
+    meta = result.get("meta") or {}
+    ts = (meta.get("started_at") or "")[:16].replace("T", " ")
+    if ts:
+        st.caption(f"Recording #{recording_id} · {ts}")
+
+    _patient_banner(result["label"], result["prob"])
+    _patient_metrics_row(result["prob"], result["hr"], result["quality"])
+
+    c1, c2 = st.columns(2)
+    with c1:
+        if st.button("📈  View ECG", use_container_width=True, key="result_view_ecg"):
+            st.session_state["patient_show_ecg"] = not st.session_state.get("patient_show_ecg", False)
+    with c2:
+        if st.button("❓  Why was this flagged?", use_container_width=True, key="result_why"):
+            st.session_state["patient_show_why"] = True
+            st.rerun()
+
+    if st.session_state.get("patient_show_ecg"):
+        st.plotly_chart(
+            plot_ecg(result["signal"], result["peaks"], fs=result["fs"],
+                     title="Your ECG recording", is_afib=(result["label"] == "AFib")),
+            use_container_width=True,
+        )
+
+    st.markdown("<div style='height:4px'></div>", unsafe_allow_html=True)
+    st.markdown("<div class='patient-btn patient-alert'>", unsafe_allow_html=True)
+    if st.button("📤  Share with Doctor", use_container_width=True, key="result_share"):
+        user_id = st.session_state.get("auth_user_id")
+        r = _server_post(
+            "/api/alert",
+            {"device_id": DEFAULT_DEVICE_ID, "user_id": user_id, "kind": "share_result",
+             "message": f"Patient shared recording #{recording_id} "
+                        f"({result['label']}, {result['prob']*100:.0f}%) with their doctor."},
+        )
+        if r and r.get("ok"):
+            st.toast("✅ Shared with your doctor.", icon="🫀")
+        else:
+            st.error("Couldn't share right now — check your connection.")
+    st.markdown("</div>", unsafe_allow_html=True)
+
+    st.markdown(
+        f"<div style='text-align:center; font-size:0.7rem; color:{COLORS['text_dim']}; margin-top:0.6rem;'>"
+        "⚠ Research tool only. Not a medical diagnosis.</div>",
+        unsafe_allow_html=True,
+    )
+
+    if st.button("← Back", key="result_back"):
+        st.session_state["patient_result_id"] = None
+        st.session_state["patient_show_ecg"] = False
+        st.rerun()
+
+
+def _patient_why_screen(recording_id: int):
+    """PATIENT — WHY WAS THIS FLAGGED? Patient-friendly XAI, with a
+    technical breakdown tucked away in an expander."""
+    result = _patient_load_result(recording_id)
+    if result is None:
+        st.error("Couldn't load that recording.")
+        if st.button("← Back", key="why_back_err"):
+            st.session_state["patient_show_why"] = False
+            st.rerun()
+        return
+
+    is_afib = result["label"] == "AFib"
+    st.markdown(f"""
+    <div class="patient-hero" style="padding-top:0.3rem;">
+      <h1 style="font-size:1.25rem;">Why was this flagged?</h1>
+      <div class="sub">The AI identified patterns associated with an
+        {'irregular' if is_afib else 'a typical'} heart rhythm.</div>
+    </div>
+    """, unsafe_allow_html=True)
+
+    st.markdown("<div class='patient-section-title'>Main contributing factors</div>", unsafe_allow_html=True)
+    reasons = result.get("reasons") or {}
+    top_reasons = sorted(reasons.items(), key=lambda kv: kv[1], reverse=True)[:3]
+    plain_language = {
+        "SDNN (variability)": "Overall heart-rate variability contributed to the prediction",
+        "pNN50": "Beat-to-beat timing changes contributed to the prediction",
+        "Irregularity score": "R-R intervals were irregular",
+        "RMSSD": "Short-term heart-rate variability contributed to the prediction",
+        "LF/HF imbalance": "Balance between heart-rhythm rhythms contributed to the prediction",
+        "CV of RR": "Beat-to-beat timing spread contributed to the prediction",
+    }
+    if top_reasons:
+        for name, _v in top_reasons:
+            st.markdown(
+                f"<div class='patient-factor'>• {plain_language.get(name, name)}</div>",
+                unsafe_allow_html=True,
+            )
+    else:
+        st.markdown(
+            "<div class='patient-factor'>• R-R intervals were irregular</div>"
+            "<div class='patient-factor'>• Heart-rate variability contributed to the prediction</div>",
+            unsafe_allow_html=True,
+        )
+
+    with st.expander("🔍  View technical explanation"):
+        st.caption(f"Method: {result['method_note']}")
+        for k, v in reasons.items():
+            bw = int(v * 100)
+            clr = COLORS["danger"] if v > 0.6 else COLORS["warn"] if v > 0.3 else COLORS["success"]
+            st.markdown(
+                f"<div style='font-size:.78rem;color:{COLORS['text_mid']};margin:2px 0'>{k}"
+                f"<span style='float:right;color:{clr};font-family:JetBrains Mono'>{v*100:.0f}%</span></div>"
+                f"<div style='background:{COLORS['panel2']};border-radius:4px;height:6px;margin-bottom:8px'>"
+                f"<div style='width:{bw}%;background:{clr};height:100%;border-radius:4px'></div></div>",
+                unsafe_allow_html=True,
+            )
+        st.metric("RMSSD", f"{result['rmssd']:.1f} ms")
+        st.metric("R-Peaks Detected", str(result["n_peaks"]))
+
+    if st.button("← Back to result", key="why_back"):
+        st.session_state["patient_show_why"] = False
+        st.rerun()
+
+
+def _patient_home():
     user = st.session_state.get("auth_user", "Patient")
-
     st.markdown(f"""
     <div class="patient-hero">
       <div class="heart">🫀</div>
       <h1>AFibAI</h1>
-      <div class="sub">Welcome, <strong>{user}</strong><br>
-        You are signed in as a <strong>patient</strong>.</div>
+      <div class="sub">Welcome, <strong>{user}</strong></div>
     </div>
     """, unsafe_allow_html=True)
 
-    # ── Wio connection status (live, polled every 2s) ───────────────────────
+    history = list_history(limit=1)
+    if history:
+        latest = history[0]
+        result = _patient_load_result(latest["id"])
+        if result:
+            _patient_banner(result["label"], result["prob"])
+            _patient_metrics_row(result["prob"], result["hr"], result["quality"])
+            ts = (latest.get("started_at") or "")[:16].replace("T", " ")
+            st.caption(f"Last recording: {ts}")
+            if st.button("View full result →", key="home_view_result", use_container_width=True):
+                st.session_state["patient_result_id"] = latest["id"]
+                st.rerun()
+    else:
+        st.markdown(
+            f"<div class='patient-status'><div class='small'>Current Status</div>"
+            f"<div class='big' style='color:{COLORS['text_dim']}'>No recordings yet</div></div>",
+            unsafe_allow_html=True,
+        )
+
+    # ── Wio connection status (live, polled every 2s) ──────────────────────
     @st.fragment(run_every="2s")
     def _connection_card():
         status = _server_get(f"/api/wio/status?device_id={DEFAULT_DEVICE_ID}")
@@ -1414,14 +1746,11 @@ def patient_view():
         age_str = f"{age:.1f}s ago" if age is not None and age < 999 else "—"
         recording = status.get("recording_active", False)
         if recording:
-            msg_color = COLORS["warn"]
-            msg = "🟠 Recording in progress"
+            msg_color, msg = COLORS["warn"], "🟠 Recording in progress"
         elif connected:
-            msg_color = COLORS["success"]
-            msg = "🟢 Connected — sensing ECG"
+            msg_color, msg = COLORS["success"], "🟢 Connected — sensing ECG"
         else:
-            msg_color = COLORS["text_dim"]
-            msg = "⏳ Waiting for Wio…"
+            msg_color, msg = COLORS["text_dim"], "⏳ Waiting for Wio…"
         total = status.get("total_samples_received", 0)
         st.markdown(
             f"<div class='patient-status'>"
@@ -1434,51 +1763,16 @@ def patient_view():
         )
     _connection_card()
 
-    st.markdown("<div style='height:6px'></div>", unsafe_allow_html=True)
-
-    # ── Recording start/stop ───────────────────────────────────────────────
-    rec_state = _server_get(f"/api/recording/active?device_id={DEFAULT_DEVICE_ID}")
-    is_recording = bool(rec_state and rec_state.get("active"))
-
-    if not is_recording:
-        st.markdown("<div class='patient-btn patient-record-start'>", unsafe_allow_html=True)
-        if st.button("⏺  Start Recording", use_container_width=True, key="patient_start"):
-            user_id = st.session_state.get("auth_user_id")
-            r = _server_post(
-                "/api/recording/start",
-                {"device_id": DEFAULT_DEVICE_ID, "user_id": user_id, "fs": 128},
-            )
-            if r and r.get("ok"):
-                st.success("Recording started.")
-                st.rerun()
-            else:
-                st.error(f"Could not start recording: {r}")
-        st.markdown("</div>", unsafe_allow_html=True)
-    else:
-        n_samples = int(rec_state.get("n_samples", 0))
-        dur = float(rec_state.get("duration_s", 0.0))
-        st.markdown(
-            f"<div class='patient-status' style='border-color:{COLORS['warn']};'>"
-            f"<div class='small'>Recording in progress</div>"
-            f"<div class='big' style='color:{COLORS['warn']}'>{dur:.1f}s · {n_samples} samples</div>"
-            f"</div>",
-            unsafe_allow_html=True,
-        )
-        st.markdown("<div class='patient-btn patient-record-stop'>", unsafe_allow_html=True)
-        if st.button("⏹  Stop Recording", use_container_width=True, key="patient_stop"):
-            r = _server_post("/api/recording/stop", {"device_id": DEFAULT_DEVICE_ID})
-            if r and r.get("ok"):
-                st.success(f"Recording saved (#{r.get('recording_id')}).")
-                st.rerun()
-            else:
-                st.error(f"Could not stop recording: {r}")
-        st.markdown("</div>", unsafe_allow_html=True)
+    st.markdown("<div class='patient-btn patient-record-start'>", unsafe_allow_html=True)
+    if st.button("⏺  Start Recording", use_container_width=True, key="home_start_recording"):
+        st.session_state["patient_nav"] = "Record"
+        st.session_state["patient_record_step"] = "prep"
+        st.rerun()
+    st.markdown("</div>", unsafe_allow_html=True)
 
     st.markdown("<div style='height:6px'></div>", unsafe_allow_html=True)
-
-    # ── Alert clinician ───────────────────────────────────────────────────
     st.markdown("<div class='patient-btn patient-alert'>", unsafe_allow_html=True)
-    if st.button("⚠  Alert the Doctor", use_container_width=True, key="patient_alert"):
+    if st.button("⚠  Alert the Doctor", use_container_width=True, key="home_alert"):
         user_id = st.session_state.get("auth_user_id")
         r = _server_post(
             "/api/alert",
@@ -1491,37 +1785,211 @@ def patient_view():
             st.error(f"Could not send alert: {r}")
     st.markdown("</div>", unsafe_allow_html=True)
 
-    st.markdown("---")
 
-    # ── My recordings ─────────────────────────────────────────────────────
-    st.markdown(f"<div class='cs-label'>My Recordings</div>", unsafe_allow_html=True)
-    history = list_history(limit=10)
+def _patient_record():
+    st.markdown("<div class='patient-section-title'>Record</div>", unsafe_allow_html=True)
+    step = st.session_state.get("patient_record_step", "prep")
+    rec_state = _server_get(f"/api/recording/active?device_id={DEFAULT_DEVICE_ID}")
+    is_recording = bool(rec_state and rec_state.get("active"))
+    if is_recording:
+        step = "recording"
+
+    if step == "prep" and not is_recording:
+        st.markdown(f"""
+        <div class="patient-status" style="text-align:left;">
+          <ol style="margin:0; padding-left:1.1rem; font-size:0.88rem; color:{COLORS['text']}; line-height:1.9;">
+            <li>Sit still</li>
+            <li>Attach the electrodes</li>
+            <li>Keep your arm still</li>
+            <li>Follow the electrode placement diagram on your Wio device</li>
+          </ol>
+        </div>
+        """, unsafe_allow_html=True)
+        st.markdown("<div class='patient-btn patient-record-start'>", unsafe_allow_html=True)
+        if st.button("✅  Ready to Record", use_container_width=True, key="record_ready"):
+            user_id = st.session_state.get("auth_user_id")
+            r = _server_post(
+                "/api/recording/start",
+                {"device_id": DEFAULT_DEVICE_ID, "user_id": user_id, "fs": FS},
+            )
+            if r and r.get("ok"):
+                st.session_state["patient_record_step"] = "recording"
+                st.rerun()
+            else:
+                st.error(f"Could not start recording: {r}")
+        st.markdown("</div>", unsafe_allow_html=True)
+        return
+
+    # step == "recording"
+    @st.fragment(run_every="1s")
+    def _recording_fragment():
+        rec_state = _server_get(f"/api/recording/active?device_id={DEFAULT_DEVICE_ID}")
+        if not rec_state or not rec_state.get("active"):
+            st.info("Recording ended.")
+            return
+        dur = float(rec_state.get("duration_s", 0.0))
+        n_samples = int(rec_state.get("n_samples", 0))
+        live = _server_get(f"/api/wio/stream?device_id={DEFAULT_DEVICE_ID}")
+        hr_str, quality = "—", "—"
+        if live and live.get("samples"):
+            tail = np.asarray(live["samples"][-min(len(live["samples"]), FS * 10):], dtype=np.float32)
+            if len(tail) >= FS * 3:
+                peaks = detect_rpeaks(tail, FS)
+                if len(peaks) >= 2:
+                    rr = np.diff(peaks) / FS * 1000
+                    rr = rr[(rr > 250) & (rr < 2000)]
+                    if len(rr):
+                        hr_str = f"{60000.0/np.mean(rr):.0f}"
+                quality, _ = estimate_signal_quality(tail, FS)
+        st.markdown(
+            f"<div class='patient-status' style='border-color:{COLORS['warn']};'>"
+            f"<div class='small'>Recording</div>"
+            f"<div class='big' style='color:{COLORS['warn']}'>{dur:.0f}s</div>"
+            f"</div>",
+            unsafe_allow_html=True,
+        )
+        st.markdown(f"""
+        <div class="patient-metric-row">
+          <div class="patient-metric"><div class="v">{hr_str}</div><div class="l">Heart Rate</div></div>
+          <div class="patient-metric"><div class="v">{quality}</div><div class="l">Signal</div></div>
+        </div>
+        """, unsafe_allow_html=True)
+        if live and live.get("samples") and len(live["samples"]) > FS * 2:
+            tail = np.asarray(live["samples"][-FS * 8:], dtype=np.float32)
+            st.plotly_chart(
+                plot_ecg(tail, detect_rpeaks(tail, FS), fs=FS, title="Live ECG preview"),
+                use_container_width=True,
+            )
+    _recording_fragment()
+
+    st.markdown("<div class='patient-btn patient-record-stop'>", unsafe_allow_html=True)
+    if st.button("⏹  Stop Recording", use_container_width=True, key="record_stop"):
+        r = _server_post("/api/recording/stop", {"device_id": DEFAULT_DEVICE_ID})
+        if r and r.get("ok"):
+            st.session_state["patient_record_step"] = "prep"
+            st.session_state["patient_result_id"] = r.get("recording_id")
+            st.session_state.setdefault("patient_result_cache", {}).pop(r.get("recording_id"), None)
+            st.rerun()
+        else:
+            st.error(f"Could not stop recording: {r}")
+    st.markdown("</div>", unsafe_allow_html=True)
+
+
+def _patient_history():
+    st.markdown("<div class='patient-section-title'>My Recordings</div>", unsafe_allow_html=True)
+    history = list_history(limit=20)
     if not history:
-        st.caption("You haven't recorded anything yet. Tap **Start Recording** above.")
-    else:
-        for rec in history:
-            ts = (rec.get("started_at") or "")[:16].replace("T", " ")
-            dur = float(rec.get("duration_s") or 0)
+        st.caption("You haven't recorded anything yet. Tap **Record** below to get started.")
+        return
+    for rec in history:
+        ts = (rec.get("started_at") or "")[:16].replace("T", " ")
+        dur = float(rec.get("duration_s") or 0)
+        result = st.session_state.get("patient_result_cache", {}).get(rec["id"])
+        if result is not None:
+            is_afib = result["label"] == "AFib"
+            pill_color = COLORS["danger"] if is_afib else COLORS["success"]
+            pill_text = "Review" if is_afib else "Normal"
+            pill_html = (f"<span class='pill' style='background:{pill_color}22;"
+                         f"color:{pill_color};'>{pill_text}</span>")
+        else:
+            pill_html = "<span class='pill' style='background:#eee;color:#888;'>—</span>"
+        cols = st.columns([5, 1])
+        with cols[0]:
             st.markdown(
                 f"<div class='patient-history-row'>"
-                f"#{rec['id']} · {ts} · {dur:.1f}s · {rec['n_samples']} samples"
-                f"</div>",
+                f"<span>{ts} · {dur:.0f}s</span>{pill_html}"
+                f"<span class='meta'>#{rec['id']}</span></div>",
                 unsafe_allow_html=True,
             )
+        with cols[1]:
+            if st.button("View", key=f"hist_view_{rec['id']}"):
+                st.session_state["patient_result_id"] = rec["id"]
+                st.rerun()
 
-    st.markdown("---")
-    st.markdown(
-        f"<div style='text-align:center; font-size:0.7rem; "
-        f"color:{COLORS['text_dim']};'>⚠ Research tool only. Not a medical device.</div>",
-        unsafe_allow_html=True,
-    )
 
-    # Sign-out button at the bottom.
-    if st.button("Sign out", key="patient_signout"):
+def _patient_profile():
+    user = st.session_state.get("auth_user", "Patient")
+    st.markdown("<div class='patient-section-title'>Profile</div>", unsafe_allow_html=True)
+    st.markdown(f"""
+    <div class="patient-status" style="text-align:left;">
+      <div style="font-size:0.8rem; color:{COLORS['text_mid']}; line-height:2;">
+        <strong>Patient ID:</strong> {user}<br>
+        <strong>Device:</strong> {DEFAULT_DEVICE_ID}<br>
+        <strong>Connected device status:</strong> see Home tab
+      </div>
+    </div>
+    """, unsafe_allow_html=True)
+
+    with st.expander("🔔  Notifications"):
+        st.caption("Alerts to your clinician are sent instantly when you tap "
+                   "**Alert the Doctor** or **Share with Doctor**.")
+    with st.expander("🔒  Privacy"):
+        st.caption("Your ECG recordings and history are only visible to you "
+                   "and your care team.")
+    with st.expander("❓  Help"):
+        st.caption("Having trouble with electrode placement or the device? "
+                   "Contact your clinic.")
+    with st.expander("📄  Legal / Agreement"):
+        st.caption("AFibAI is a research/screening prototype, not a diagnostic "
+                   "medical device. See the agreement you accepted at sign-in.")
+    with st.expander("ℹ️  About"):
+        st.caption("AFibAI — ECG monitoring & AFib screening research prototype.")
+
+    st.markdown("<div style='height:10px'></div>", unsafe_allow_html=True)
+    if st.button("Sign out", key="patient_signout", use_container_width=True):
         for k in ("authenticated", "auth_user", "auth_user_id", "auth_role",
-                  "auth_stage", "agreement_accepted"):
+                  "auth_stage", "agreement_accepted", "patient_nav",
+                  "patient_result_id", "patient_show_why", "patient_show_ecg",
+                  "patient_record_step", "patient_result_cache"):
             st.session_state.pop(k, None)
         st.rerun()
+
+
+def patient_view():
+    """Phone-friendly patient UI.
+
+    "What did my recording mean, and what has happened over time?"
+    Four sections (Home / Record / History / Profile), plus a Result screen
+    and a patient-friendly "Why was this flagged?" explanation. Patients see
+    simplified results — probability, HR, signal quality, plain-language
+    explanation — never the raw HRV/SHAP dashboard (that's the doctor view).
+    """
+    _patient_css()
+    st.session_state.setdefault("patient_nav", "Home")
+
+    # ── Overlay screens take priority over the tab content ─────────────────
+    if st.session_state.get("patient_result_id") is not None:
+        if st.session_state.get("patient_show_why"):
+            _patient_why_screen(st.session_state["patient_result_id"])
+        else:
+            _patient_result_screen(st.session_state["patient_result_id"])
+        return
+
+    nav = st.session_state["patient_nav"]
+    if nav == "Home":
+        _patient_home()
+    elif nav == "Record":
+        _patient_record()
+    elif nav == "History":
+        _patient_history()
+    elif nav == "Profile":
+        _patient_profile()
+
+    # ── Bottom navigation ────────────────────────────────────────────────
+    st.markdown("<div class='patient-navbar'>", unsafe_allow_html=True)
+    tabs = [("Home", "🏠"), ("Record", "⏺"), ("History", "🕘"), ("Profile", "👤")]
+    cols = st.columns(4)
+    for col, (name, icon) in zip(cols, tabs):
+        with col:
+            active = "nav-active" if nav == name else ""
+            st.markdown(f"<div class='{active}'>", unsafe_allow_html=True)
+            if st.button(f"{icon}\n{name}", key=f"nav_{name}", use_container_width=True):
+                st.session_state["patient_nav"] = name
+                st.session_state["patient_result_id"] = None
+                st.session_state["patient_show_why"] = False
+                st.rerun()
+            st.markdown("</div>", unsafe_allow_html=True)
+    st.markdown("</div>", unsafe_allow_html=True)
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -1531,12 +1999,16 @@ def patient_view():
 def main():
     # ── Patient alerts (consume so they're shown once) ──────────────────────
     alerts = _server_get("/api/alerts?consume=1") or {}
+    seen_alerts = st.session_state.setdefault("doctor_seen_alerts", [])
     for a in alerts.get("alerts", []):
         st.toast(
             f"🚨 Patient alert: {a.get('message') or a.get('kind','')} "
             f"· device {a.get('device_id','?')}",
             icon="🚨",
         )
+        seen_alerts.append(a)
+    # Keep only the most recent alerts around for the Dashboard.
+    st.session_state["doctor_seen_alerts"] = seen_alerts[-20:]
 
     with st.sidebar:
         st.markdown(f"""
@@ -1546,7 +2018,7 @@ def main():
                       font-weight:700; line-height:1;'>AFibAI</div>
           <div style='font-family:"JetBrains Mono",monospace; font-size:0.55rem;
                       color:{COLORS["text_dim"]}; letter-spacing:0.12em; margin-top:4px;'>
-            HRV ANALYSIS v1.0
+            DOCTOR / RESEARCH MODE
           </div>
           <div style='font-size:0.7rem; color:{COLORS["text_mid"]}; margin-top:6px; line-height:1.5;'>
             ECG Signal Analysis<br>AFib Detection Engine
@@ -1557,8 +2029,7 @@ def main():
         st.divider()
         st.markdown(f'<div class="cs-label">Input Source</div>', unsafe_allow_html=True)
 
-        _mode_options = ["Demo ECG", "Upload .npy file", "Upload .csv file",
-                         "ESP32 (WiFi)", "Wio Live (Server)"]
+        _mode_options = ["Demo ECG", "Upload .npy file", "Upload .csv file", "Wio Live (Server)"]
         # Honor an override set by the History → "Load" buttons, then clear it
         # so the user can switch modes again afterwards.
         _override = st.session_state.pop("input_mode_override", None)
@@ -1651,6 +2122,7 @@ def main():
                         )
                         st.session_state["wio_device_id"] = meta.get("device_id", DEFAULT_DEVICE_ID)
                         st.session_state["input_mode_override"] = "Wio Live (Server)"
+                        st.session_state["doctor_nav"] = "ECG Analysis"
                         st.rerun()
                     else:
                         st.error("Could not load that recording.")
@@ -1677,6 +2149,14 @@ def main():
             _show_agreement_dialog()
 
         st.divider()
+        if st.button("Sign out", key="doctor_signout", use_container_width=True):
+            for k in ("authenticated", "auth_user", "auth_user_id", "auth_role",
+                      "auth_stage", "agreement_accepted", "doctor_nav",
+                      "wio_signal", "wio_label", "wio_device_id",
+                      "doctor_seen_alerts"):
+                st.session_state.pop(k, None)
+            st.rerun()
+
         st.markdown(f"""
         <div style='font-size:0.6rem; color:{COLORS["text_dim"]}; line-height:1.8;'>
           ⚠️ Research tool only.<br>Not a certified medical device.<br>Consult a physician for diagnosis.
@@ -1891,10 +2371,10 @@ def main():
         # samples inside this window — there is no separate "whole
         # signal" prediction.
         #
-        # The slider widget itself is rendered further down the page
-        # (right under the ECG plot). We read its current value from
-        # session_state here so the rest of the page — including the
-        # ECG plot above the slider — can react to it immediately.
+        # The slider widget itself is rendered inside the ECG Analysis
+        # tab, right under the ECG plot. We read its current value from
+        # session_state here so the rest of the page can react to it
+        # immediately.
         # ─────────────────────────────────────────────────────────────────
         window_len_s = min(SLIDE_WIN_SEC, view_s)
         max_start = max(0.0, view_s - window_len_s)
@@ -1919,175 +2399,356 @@ def main():
             model_choice, features, silent=False
         )
         is_afib = label == "AFib"
+        quality, quality_score = estimate_signal_quality(window_sig, fs_input)
 
         # Full-signal trace, used only to draw the ECG plot with the window
         # highlighted on it — all numbers still come from the window above.
         proc_full  = preprocess(signal, fs=fs_input)
         peaks_full = detect_rpeaks(signal, fs=fs_input)
 
+        df_feat = pd.DataFrame([
+            {"Feature": n, "Value": f"{v:.4f}", "Unit": FEATURE_UNITS.get(n, ""),
+             "Description": FEATURE_DESCRIPTIONS.get(n, "")}
+            for n, v in zip(FEATURE_NAMES, features)
+        ])
     else:
-        st.markdown(
-            f"""
-            <div style='padding:80px 20px; text-align:center;'>
-            <div style='font-size:3rem; margin-bottom:12px;'>🫀</div>
-            <div style='font-size:0.9rem; color:{COLORS["text_dim"]};'>
-                Input file to begin
-            </div>
-            </div>
-            """,
-            unsafe_allow_html=True
-        )
-        return
+        label = prob = threshold = method_note = reasons = individual_preds = None
+        is_afib = False
+        quality, quality_score = "—", 0.0
+        peaks = np.array([]); rr_ms = np.array([]); features = None; feat = {}
+        proc_full = peaks_full = None
+        window_range = (0.0, 0.0); window_len_s = 0.0; max_start = 0.0; sw_pos = 0.0
+        view_s = 0.0
+        df_feat = None
 
-    if is_afib:
-        st.markdown(f"""
-        <div class='cs-alert cs-alert-afib'>
-          <span style='font-size:1.5rem; flex-shrink:0;'>⚠️</span>
-          <div>
-            <div style='font-weight:700; font-size:0.95rem; color:{COLORS["danger"]}; font-family:"Sora",sans-serif;'>
-              Atrial Fibrillation Detected
-            </div>
-            <div style='font-size:0.78rem; color:{COLORS["text_mid"]}; margin-top:3px;'>
-              AFib probability (current window): <strong>{prob*100:.1f}%</strong> — Consult a physician immediately.
-              <br>
-              Method: <strong>{method_note}</strong> &nbsp;|&nbsp; Decision threshold: <strong>{threshold*100:.0f}%</strong>
-            </div>
-          </div>
-        </div>""", unsafe_allow_html=True)
-    else:
-        st.markdown(f"""
-        <div class='cs-alert cs-alert-normal'>
-          <span style='font-size:1.5rem; flex-shrink:0;'>✅</span>
-          <div>
-            <div style='font-weight:700; font-size:0.95rem; color:{COLORS["success"]}; font-family:"Sora",sans-serif;'>
-              Normal Sinus Rhythm
-            </div>
-            <div style='font-size:0.78rem; color:{COLORS["text_mid"]}; margin-top:3px;'>
-              AFib probability (current window): <strong>{prob*100:.1f}%</strong> — No atrial fibrillation detected.
-              <br>
-              Method: <strong>{method_note}</strong> &nbsp;|&nbsp; Decision threshold: <strong>{threshold*100:.0f}%</strong>
-            </div>
-          </div>
-        </div>""", unsafe_allow_html=True)
+    # ═════════════════════════════════════════════════════════════════════
+    # DOCTOR NAVIGATION — Dashboard / Patients / Recordings / ECG Analysis /
+    # HRV / AI-XAI / Trends / Reports  (per AFibAI interface spec)
+    # ═════════════════════════════════════════════════════════════════════
+    section_names = [
+        "🏠 Dashboard", "👥 Patients", "📼 Recordings", "🫀 ECG Analysis",
+        "💓 HRV", "🤖 AI / XAI", "📈 Trends", "📄 Reports",
+    ]
+    all_history = list_history(limit=100)
 
-    if model_choice == "Ensemble" and show_individual and individual_preds:
-        rows_html = ""
-        for name, p in individual_preds.items():
-            rows_html += (
-                f"<div class='cs-pred-row'><span>{name}</span>"
-                f"<span style='color:{COLORS['text']}'>{p*100:.1f}%</span></div>"
-            )
-        rows_html += (
-            f"<div style='border-top:1px solid {COLORS['border']}; margin:6px 0;'></div>"
-            f"<div class='cs-pred-row' style='color:{COLORS['accent']}; font-weight:700;'>"
-            f"<span>Ensemble</span><span>{prob*100:.1f}%</span></div>"
-        )
-        st.markdown(
-            f"<div class='cs-card'><div class='cs-label'>Individual Model Predictions</div>{rows_html}</div>",
-            unsafe_allow_html=True,
-        )
+    tabs = st.tabs(section_names)
 
-    m1, m2, m3, m4, m5 = st.columns(5)
-    m1.metric("AFib Probability", f"{prob*100:.1f}%",
-              delta="HIGH ⚠" if is_afib else "Normal",
-              delta_color="inverse" if is_afib else "normal")
-    m2.metric("Mean Heart Rate",  f"{feat['mean_hr']:.1f} bpm")
-    m3.metric("RMSSD",            f"{feat['rmssd']:.1f} ms",
-              help="Root Mean Square Successive Differences — elevated in AFib")
-    m4.metric("SDNN",             f"{feat['sdnn']:.1f} ms")
-    m5.metric("R-Peaks Detected", str(len(peaks)))
-
-    st.markdown("<div style='height:6px'></div>", unsafe_allow_html=True)
-
-    bar_color = COLORS["success"] if prob < 0.35 else COLORS["warn"] if prob < 0.65 else COLORS["danger"]
-    bar_pct = max(1, int(round(prob * 100)))
-    st.markdown(f"""
-    <div class="cs-card" style="padding:1.1rem 1.5rem;">
-      <div style="display:flex; justify-content:space-between; align-items:baseline; margin-bottom:10px;">
-        <div class="cs-label" style="margin:0; padding:0; border:none;">AFib Probability</div>
-        <div style="font-family:'JetBrains Mono',monospace; font-size:1.3rem; font-weight:700; color:{bar_color};">{prob*100:.1f}%</div>
-      </div>
-      <div style="position:relative; background:{COLORS['panel2']}; border:1px solid {COLORS['border']}; border-radius:8px; height:16px; overflow:hidden;">
-        <div style="width:{bar_pct}%; background:{bar_color}; height:100%; border-radius:8px; transition:width 0.3s ease;"></div>
-        <div style="position:absolute; left:35%; top:0; bottom:0; width:1px; background:{COLORS['border_light']};"></div>
-        <div style="position:absolute; left:65%; top:0; bottom:0; width:1px; background:{COLORS['border_light']};"></div>
-      </div>
-      <div style="text-align:right; margin-top:6px; font-size:0.75rem; font-weight:700; color:{bar_color}; text-transform:uppercase; letter-spacing:0.05em;">{label}</div>
-    </div>
-    """, unsafe_allow_html=True)
-
-    st.plotly_chart(
-        plot_ecg(proc_full[:n_view], peaks_full[peaks_full < n_view], fs=fs_input,
-                 title=f"ECG  ·  Full {view_s:.0f}s  ·  {signal_label}  ·  window {window_range[0]:.0f}s–{window_range[1]:.0f}s",
-                 is_afib=is_afib,
-                 window_range=window_range,
-                 window_color=(COLORS["danger"] if is_afib else COLORS["accent"])),
-        use_container_width=True,
-    )
-
-    # ── Analysis window scrub bar — sits right under the ECG plot ─────────
-    st.markdown(f'<div class="cs-label">Analysis Window · {window_len_s:.0f}s wide</div>', unsafe_allow_html=True)
-    if max_start > 0:
-        st.slider(
-            "Scroll window across signal (s)", 0.0, float(max_start),
-            value=sw_pos, step=SLIDE_STEP_SEC,
-            key="sw_slider",
-            help="Drag to scan the recording — everything above reflects only "
-                 "the highlighted window.",
-            label_visibility="collapsed",
-        )
-    else:
-        st.caption("Signal is shorter than the analysis window — using the full segment.")
-
-    st.markdown("---")
-
-    tabs = st.tabs(["💓  RR Tachogram", "🌀  Poincaré", "📊  HRV Features"])
-
+    # ── DASHBOARD ────────────────────────────────────────────────────────
     with tabs[0]:
-        if len(rr_ms) >= 3:
-            st.plotly_chart(plot_rr(rr_ms), use_container_width=True)
-        else:
-            st.warning("Not enough RR intervals detected.")
+        today_str = datetime.now().strftime("%Y-%m-%d")
+        today_count = sum(1 for rec in all_history if (rec.get("started_at") or "").startswith(today_str))
+        d1, d2, d3, d4 = st.columns(4)
+        d1.metric("Total Recordings", str(len(all_history)))
+        d2.metric("Today's Recordings", str(today_count))
+        d3.metric("Recent Alerts", str(len(st.session_state.get("doctor_seen_alerts", []))))
+        d4.metric("Current Signal Quality", quality if signal is not None else "—")
 
+        st.markdown("<div style='height:6px'></div>", unsafe_allow_html=True)
+        st.markdown(f'<div class="cs-label">Recent Alerts</div>', unsafe_allow_html=True)
+        recent = list(reversed(st.session_state.get("doctor_seen_alerts", [])))[:8]
+        if not recent:
+            st.caption("No alerts received yet. Patient alerts (symptom reports, shared "
+                       "results) will appear here as they come in.")
+        else:
+            for a in recent:
+                kind = a.get("kind", "alert")
+                pill = "⚠️" if kind == "symptom" else "📤"
+                st.markdown(
+                    f"<div class='cs-card' style='padding:0.7rem 1.1rem; margin-bottom:0.4rem;'>"
+                    f"<span style='font-family:JetBrains Mono; font-size:0.8rem;'>{pill} "
+                    f"device {a.get('device_id','?')}</span> — "
+                    f"<span style='color:{COLORS['text_mid']}; font-size:0.82rem;'>"
+                    f"{a.get('message','')}</span></div>",
+                    unsafe_allow_html=True,
+                )
+
+        if signal is not None:
+            st.markdown("<div style='height:6px'></div>", unsafe_allow_html=True)
+            st.markdown(f'<div class="cs-label">Current Recording — Quick Summary</div>', unsafe_allow_html=True)
+            if is_afib:
+                st.markdown(f"""
+                <div class='cs-alert cs-alert-afib'>
+                  <span style='font-size:1.5rem; flex-shrink:0;'>⚠️</span>
+                  <div>
+                    <div style='font-weight:700; font-size:0.95rem; color:{COLORS["danger"]}; font-family:"Sora",sans-serif;'>
+                      Possible AFib
+                    </div>
+                    <div style='font-size:0.78rem; color:{COLORS["text_mid"]}; margin-top:3px;'>
+                      AFib probability: <strong>{prob*100:.1f}%</strong> — flagged for review.
+                    </div>
+                  </div>
+                </div>""", unsafe_allow_html=True)
+            else:
+                st.markdown(f"""
+                <div class='cs-alert cs-alert-normal'>
+                  <span style='font-size:1.5rem; flex-shrink:0;'>✅</span>
+                  <div>
+                    <div style='font-weight:700; font-size:0.95rem; color:{COLORS["success"]}; font-family:"Sora",sans-serif;'>
+                      Normal Sinus Rhythm
+                    </div>
+                    <div style='font-size:0.78rem; color:{COLORS["text_mid"]}; margin-top:3px;'>
+                      AFib probability: <strong>{prob*100:.1f}%</strong> — no AFib detected.
+                    </div>
+                  </div>
+                </div>""", unsafe_allow_html=True)
+        else:
+            st.info("Load a recording from the sidebar (or the **Recordings** tab) to see a summary here.")
+
+    # ── PATIENTS ─────────────────────────────────────────────────────────
     with tabs[1]:
-        if len(rr_ms) >= 4:
-            st.plotly_chart(plot_poincare(rr_ms, is_afib=is_afib), use_container_width=True)
-        else:
-            st.warning("Not enough RR intervals for Poincaré plot.")
+        st.caption(
+            "This prototype currently tracks a single connected device/patient "
+            f"(`{DEFAULT_DEVICE_ID}`). Once multi-patient accounts are wired up "
+            "server-side, this section will list every patient with their "
+            "latest status."
+        )
+        latest_result = None
+        if all_history:
+            latest_rec = all_history[0]
+            sig0, meta0 = load_recording_from_server(int(latest_rec["id"]))
+            if sig0 is not None and len(sig0) > 0:
+                latest_result = compute_quick_result(sig0, int((meta0 or {}).get("fs") or FS), model_choice)
 
+        p_status = latest_result["label"] if latest_result else "No data"
+        p_prob = f"{latest_result['prob']*100:.1f}%" if latest_result else "—"
+        pill_color = COLORS["danger"] if latest_result and latest_result["label"] == "AFib" else COLORS["success"]
+        st.markdown(f"""
+        <div class="cs-card">
+          <div class="cs-label">Patient · Device {DEFAULT_DEVICE_ID}</div>
+          <div style="display:flex; gap:2.5rem; flex-wrap:wrap; align-items:center;">
+            <div>
+              <div style="font-size:0.7rem; color:{COLORS['text_dim']}; text-transform:uppercase;">Status</div>
+              <div style="font-weight:700; color:{pill_color}; font-family:'Sora',sans-serif; font-size:1.1rem;">{p_status}</div>
+            </div>
+            <div>
+              <div style="font-size:0.7rem; color:{COLORS['text_dim']}; text-transform:uppercase;">AFib Probability</div>
+              <div style="font-weight:700; font-family:'JetBrains Mono',monospace; font-size:1.1rem;">{p_prob}</div>
+            </div>
+            <div>
+              <div style="font-size:0.7rem; color:{COLORS['text_dim']}; text-transform:uppercase;">Total Recordings</div>
+              <div style="font-weight:700; font-family:'JetBrains Mono',monospace; font-size:1.1rem;">{len(all_history)}</div>
+            </div>
+          </div>
+        </div>
+        """, unsafe_allow_html=True)
+        st.caption("Tip: open the **Trends** tab for a flagged-vs-normal breakdown over recent recordings.")
+
+    # ── RECORDINGS ───────────────────────────────────────────────────────
     with tabs[2]:
-        left, right = st.columns([1,1])
-        with left:
-            st.markdown(f'<div class="cs-label">HRV Feature Values</div>', unsafe_allow_html=True)
-            rows = [{"Feature":n, "Value":f"{v:.4f}",
-                     "Unit":FEATURE_UNITS.get(n,""),
-                     "Description":FEATURE_DESCRIPTIONS.get(n,"")}
-                    for n, v in zip(FEATURE_NAMES, features)]
-            df_feat = pd.DataFrame(rows)
-            table_rows_html = "".join(
-                f"<tr><td>{r['Feature']}</td><td>{r['Value']}</td>"
-                f"<td>{r['Unit']}</td><td>{r['Description']}</td></tr>"
-                for r in rows
-            )
+        st.markdown(f'<div class="cs-label">All Recordings</div>', unsafe_allow_html=True)
+        if not all_history:
+            st.caption("No recordings yet.")
+        else:
+            rows_html = ""
+            for rec in all_history:
+                ts = (rec.get("started_at") or "")[:16].replace("T", " ")
+                dur = float(rec.get("duration_s") or 0.0)
+                rows_html += (
+                    f"<tr><td>#{rec['id']}</td><td>{ts}</td><td>{dur:.1f}s</td>"
+                    f"<td>{rec.get('n_samples', 0)}</td></tr>"
+                )
             st.markdown(f"""
             <div class="cs-table-wrap">
               <table class="cs-table">
-                <thead><tr><th>Feature</th><th>Value</th><th>Unit</th><th>Description</th></tr></thead>
-                <tbody>{table_rows_html}</tbody>
+                <thead><tr><th>ID</th><th>Started</th><th>Duration</th><th>Samples</th></tr></thead>
+                <tbody>{rows_html}</tbody>
               </table>
             </div>
             """, unsafe_allow_html=True)
-        with right:
-            st.plotly_chart(plot_radar(features), use_container_width=True)
+            st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
+            load_id = st.selectbox(
+                "Open a recording in ECG Analysis",
+                [r["id"] for r in all_history],
+                format_func=lambda rid: f"#{rid}  ·  " + recording_summary(
+                    next(r for r in all_history if r["id"] == rid)
+                ),
+                key="recordings_tab_select",
+            )
+            if st.button("📂  Open in ECG Analysis", key="recordings_tab_open"):
+                sig, meta = load_recording_from_server(int(load_id))
+                if sig is not None and len(sig) > 0:
+                    st.session_state["wio_signal"] = sig
+                    st.session_state["wio_label"] = (
+                        f"History #{load_id}  ·  {meta.get('device_id','?')}  ·  "
+                        f"{meta.get('duration_s',0):.1f}s"
+                    )
+                    st.session_state["wio_device_id"] = meta.get("device_id", DEFAULT_DEVICE_ID)
+                    st.session_state["input_mode_override"] = "Wio Live (Server)"
+                    st.rerun()
+                else:
+                    st.error("Could not load that recording.")
 
-        if reasons:
-            with st.expander("🔍  Score breakdown (HRV heuristic)", expanded=False):
+    # ── ECG ANALYSIS ─────────────────────────────────────────────────────
+    with tabs[3]:
+        if signal is None or len(signal) == 0:
+            st.markdown(
+                f"""
+                <div style='padding:60px 20px; text-align:center;'>
+                <div style='font-size:3rem; margin-bottom:12px;'>🫀</div>
+                <div style='font-size:0.9rem; color:{COLORS["text_dim"]};'>
+                    Select an input source in the sidebar to begin.
+                </div>
+                </div>
+                """,
+                unsafe_allow_html=True
+            )
+        else:
+            if is_afib:
+                st.markdown(f"""
+                <div class='cs-alert cs-alert-afib'>
+                  <span style='font-size:1.5rem; flex-shrink:0;'>⚠️</span>
+                  <div>
+                    <div style='font-weight:700; font-size:0.95rem; color:{COLORS["danger"]}; font-family:"Sora",sans-serif;'>
+                      Atrial Fibrillation Detected
+                    </div>
+                    <div style='font-size:0.78rem; color:{COLORS["text_mid"]}; margin-top:3px;'>
+                      AFib probability (current window): <strong>{prob*100:.1f}%</strong> — Consult a physician immediately.
+                      <br>
+                      Method: <strong>{method_note}</strong> &nbsp;|&nbsp; Decision threshold: <strong>{threshold*100:.0f}%</strong>
+                    </div>
+                  </div>
+                </div>""", unsafe_allow_html=True)
+            else:
+                st.markdown(f"""
+                <div class='cs-alert cs-alert-normal'>
+                  <span style='font-size:1.5rem; flex-shrink:0;'>✅</span>
+                  <div>
+                    <div style='font-weight:700; font-size:0.95rem; color:{COLORS["success"]}; font-family:"Sora",sans-serif;'>
+                      Normal Sinus Rhythm
+                    </div>
+                    <div style='font-size:0.78rem; color:{COLORS["text_mid"]}; margin-top:3px;'>
+                      AFib probability (current window): <strong>{prob*100:.1f}%</strong> — No atrial fibrillation detected.
+                      <br>
+                      Method: <strong>{method_note}</strong> &nbsp;|&nbsp; Decision threshold: <strong>{threshold*100:.0f}%</strong>
+                    </div>
+                  </div>
+                </div>""", unsafe_allow_html=True)
+
+            m1, m2, m3, m4, m5 = st.columns(5)
+            m1.metric("AFib Probability", f"{prob*100:.1f}%",
+                      delta="HIGH ⚠" if is_afib else "Normal",
+                      delta_color="inverse" if is_afib else "normal")
+            m2.metric("Mean Heart Rate",  f"{feat['mean_hr']:.1f} bpm")
+            m3.metric("R-Peaks Detected", str(len(peaks)))
+            m4.metric("Signal Quality",   quality)
+            m5.metric("Window", f"{window_len_s:.0f}s")
+
+            st.plotly_chart(
+                plot_ecg(proc_full[:n_view], peaks_full[peaks_full < n_view], fs=fs_input,
+                         title=f"ECG  ·  Full {view_s:.0f}s  ·  {signal_label}  ·  window {window_range[0]:.0f}s–{window_range[1]:.0f}s",
+                         is_afib=is_afib,
+                         window_range=window_range,
+                         window_color=(COLORS["danger"] if is_afib else COLORS["accent"])),
+                use_container_width=True,
+            )
+
+            st.markdown(f'<div class="cs-label">Analysis Window · {window_len_s:.0f}s wide</div>', unsafe_allow_html=True)
+            if max_start > 0:
+                st.slider(
+                    "Scroll window across signal (s)", 0.0, float(max_start),
+                    value=sw_pos, step=SLIDE_STEP_SEC,
+                    key="sw_slider",
+                    help="Drag to scan the recording — everything else on this "
+                         "page reflects only the highlighted window.",
+                    label_visibility="collapsed",
+                )
+            else:
+                st.caption("Signal is shorter than the analysis window — using the full segment.")
+
+    # ── HRV ──────────────────────────────────────────────────────────────
+    with tabs[4]:
+        if signal is None or len(signal) == 0:
+            st.info("Load a recording to see HRV analysis.")
+        else:
+            h1, h2, h3, h4 = st.columns(4)
+            h1.metric("RMSSD", f"{feat['rmssd']:.1f} ms",
+                      help="Root Mean Square Successive Differences — elevated in AFib")
+            h2.metric("SDNN",  f"{feat['sdnn']:.1f} ms")
+            h3.metric("Mean RR", f"{feat['mean_rr']:.0f} ms")
+            h4.metric("Mean HR", f"{feat['mean_hr']:.1f} bpm")
+
+            hrv_tabs = st.tabs(["💓  RR Tachogram", "🌀  Poincaré", "📊  HRV Features"])
+            with hrv_tabs[0]:
+                if len(rr_ms) >= 3:
+                    st.plotly_chart(plot_rr(rr_ms), use_container_width=True)
+                else:
+                    st.warning("Not enough RR intervals detected.")
+            with hrv_tabs[1]:
+                if len(rr_ms) >= 4:
+                    st.plotly_chart(plot_poincare(rr_ms, is_afib=is_afib), use_container_width=True)
+                else:
+                    st.warning("Not enough RR intervals for Poincaré plot.")
+            with hrv_tabs[2]:
+                left, right = st.columns([1, 1])
+                with left:
+                    st.markdown(f'<div class="cs-label">HRV Feature Values</div>', unsafe_allow_html=True)
+                    table_rows_html = "".join(
+                        f"<tr><td>{n}</td><td>{v:.4f}</td>"
+                        f"<td>{FEATURE_UNITS.get(n,'')}</td><td>{FEATURE_DESCRIPTIONS.get(n,'')}</td></tr>"
+                        for n, v in zip(FEATURE_NAMES, features)
+                    )
+                    st.markdown(f"""
+                    <div class="cs-table-wrap">
+                      <table class="cs-table">
+                        <thead><tr><th>Feature</th><th>Value</th><th>Unit</th><th>Description</th></tr></thead>
+                        <tbody>{table_rows_html}</tbody>
+                      </table>
+                    </div>
+                    """, unsafe_allow_html=True)
+                with right:
+                    st.plotly_chart(plot_radar(features), use_container_width=True)
+                st.download_button(
+                    "⬇  Download HRV Features (CSV)",
+                    data=df_feat.to_csv(index=False).encode(),
+                    file_name="hrv_features.csv",
+                    mime="text/csv",
+                    key="hrv_tab_download",
+                )
+
+    # ── AI / XAI ─────────────────────────────────────────────────────────
+    with tabs[5]:
+        if signal is None or len(signal) == 0:
+            st.info("Load a recording to see the model's prediction and explanation.")
+        else:
+            a1, a2, a3, a4 = st.columns(4)
+            a1.metric("AFib Probability", f"{prob*100:.1f}%")
+            a2.metric("Classification", label)
+            a3.metric("Model", model_choice)
+            a4.metric("Decision Threshold", f"{threshold*100:.0f}%")
+
+            if model_choice == "Ensemble" and individual_preds:
+                st.markdown(f'<div class="cs-label">Model Agreement</div>', unsafe_allow_html=True)
+                rows_html = ""
+                afib_votes = 0
+                for name, p in individual_preds.items():
+                    vote = "AFib" if p >= 0.5 else "Normal"
+                    if vote == "AFib":
+                        afib_votes += 1
+                    vote_color = COLORS["danger"] if vote == "AFib" else COLORS["success"]
+                    rows_html += (
+                        f"<div class='cs-pred-row'><span>{name} → "
+                        f"<span style='color:{vote_color}'>{vote}</span></span>"
+                        f"<span style='color:{COLORS['text']}'>{p*100:.1f}%</span></div>"
+                    )
+                rows_html += (
+                    f"<div style='border-top:1px solid {COLORS['border']}; margin:6px 0;'></div>"
+                    f"<div class='cs-pred-row' style='color:{COLORS['accent']}; font-weight:700;'>"
+                    f"<span>Final — {afib_votes}/{len(individual_preds)} models → AFib</span>"
+                    f"<span>{prob*100:.1f}%</span></div>"
+                )
+                st.markdown(
+                    f"<div class='cs-card'>{rows_html}</div>",
+                    unsafe_allow_html=True,
+                )
+
+            if reasons:
+                st.markdown(f'<div class="cs-label">SHAP-style Feature Importance</div>', unsafe_allow_html=True)
                 st.markdown(f"""
                 <div style='font-size:0.8rem; color:{COLORS["text_mid"]}; margin-bottom:0.8rem; line-height:1.6;'>
                   Each bar shows how much a feature pushed toward AFib.
                   Higher scores contribute more to the overall AFib probability.
                 </div>""", unsafe_allow_html=True)
-                for k, v in reasons.items():
+                for k, v in sorted(reasons.items(), key=lambda kv: kv[1], reverse=True):
                     bw  = int(v*100)
                     clr = COLORS["danger"] if v > 0.6 else COLORS["warn"] if v > 0.3 else COLORS["success"]
                     st.markdown(
@@ -2098,20 +2759,141 @@ def main():
                         unsafe_allow_html=True,
                     )
 
-    st.markdown("---")
-    st.download_button(
-        "⬇  Download HRV Features (CSV)",
-        data=df_feat.to_csv(index=False).encode(),
-        file_name="hrv_features.csv",
-        mime="text/csv",
-    )
+    # ── TRENDS ───────────────────────────────────────────────────────────
+    with tabs[6]:
+        st.caption("AFib probability and key HRV metrics across recent recordings.")
+        if not all_history:
+            st.info("No recordings yet — trends will appear once there's history.")
+        else:
+            trend_source = list(reversed(all_history[:20]))  # oldest → newest
+            trend_rows = []
+            with st.spinner("Computing trend history…"):
+                for rec in trend_source:
+                    sig_t, meta_t = load_recording_from_server(int(rec["id"]))
+                    if sig_t is None or len(sig_t) == 0:
+                        continue
+                    res_t = compute_quick_result(sig_t, int((meta_t or {}).get("fs") or FS), model_choice)
+                    ts = (rec.get("started_at") or "")[:16].replace("T", " ")
+                    trend_rows.append({
+                        "Recording": f"#{rec['id']}", "Time": ts,
+                        "AFib Prob (%)": res_t["prob"] * 100,
+                        "Heart Rate (bpm)": res_t["hr"],
+                        "RMSSD (ms)": res_t["rmssd"],
+                        "SDNN (ms)": res_t["sdnn"],
+                    })
+            if not trend_rows:
+                st.info("Couldn't compute trends for the available recordings.")
+            else:
+                df_trend = pd.DataFrame(trend_rows)
+                fig_t = go.Figure()
+                fig_t.add_trace(go.Scatter(
+                    x=df_trend["Recording"], y=df_trend["AFib Prob (%)"], mode="lines+markers",
+                    name="AFib Probability (%)", line=dict(color=COLORS["danger"], width=2),
+                ))
+                fig_t.update_layout(
+                    **_base_layout(height=280),
+                    title=dict(text="AFib Probability Over Time", font=dict(family="Inter", size=12, color=COLORS["text_mid"])),
+                    xaxis=dict(color=COLORS["text_mid"], gridcolor="rgba(91,117,104,0.25)"),
+                    yaxis=dict(title="AFib Probability (%)", color=COLORS["text_mid"], gridcolor="rgba(91,117,104,0.25)", range=[0, 100]),
+                )
+                st.plotly_chart(fig_t, use_container_width=True)
+
+                fig_h = go.Figure()
+                fig_h.add_trace(go.Scatter(x=df_trend["Recording"], y=df_trend["Heart Rate (bpm)"],
+                                            mode="lines+markers", name="Heart Rate",
+                                            line=dict(color=COLORS["accent2"], width=2)))
+                fig_h.update_layout(
+                    **_base_layout(height=240),
+                    title=dict(text="Heart Rate Over Time", font=dict(family="Inter", size=12, color=COLORS["text_mid"])),
+                    xaxis=dict(color=COLORS["text_mid"], gridcolor="rgba(91,117,104,0.25)"),
+                    yaxis=dict(title="bpm", color=COLORS["text_mid"], gridcolor="rgba(91,117,104,0.25)"),
+                )
+                st.plotly_chart(fig_h, use_container_width=True)
+
+                rr1, rr2 = st.columns(2)
+                with rr1:
+                    fig_r = go.Figure()
+                    fig_r.add_trace(go.Scatter(x=df_trend["Recording"], y=df_trend["RMSSD (ms)"],
+                                                mode="lines+markers", line=dict(color=COLORS["accent"], width=2)))
+                    fig_r.update_layout(
+                        **_base_layout(height=220),
+                        title=dict(text="RMSSD", font=dict(family="Inter", size=12, color=COLORS["text_mid"])),
+                        xaxis=dict(color=COLORS["text_mid"], gridcolor="rgba(91,117,104,0.25)"),
+                        yaxis=dict(color=COLORS["text_mid"], gridcolor="rgba(91,117,104,0.25)"),
+                    )
+                    st.plotly_chart(fig_r, use_container_width=True)
+                with rr2:
+                    fig_s = go.Figure()
+                    fig_s.add_trace(go.Scatter(x=df_trend["Recording"], y=df_trend["SDNN (ms)"],
+                                                mode="lines+markers", line=dict(color=COLORS["warn"], width=2)))
+                    fig_s.update_layout(
+                        **_base_layout(height=220),
+                        title=dict(text="SDNN", font=dict(family="Inter", size=12, color=COLORS["text_mid"])),
+                        xaxis=dict(color=COLORS["text_mid"], gridcolor="rgba(91,117,104,0.25)"),
+                        yaxis=dict(color=COLORS["text_mid"], gridcolor="rgba(91,117,104,0.25)"),
+                    )
+                    st.plotly_chart(fig_s, use_container_width=True)
+
+                with st.expander("View trend data table"):
+                    st.dataframe(df_trend, use_container_width=True, hide_index=True)
+
+    # ── REPORTS ──────────────────────────────────────────────────────────
+    with tabs[7]:
+        if signal is None or len(signal) == 0:
+            st.info("Load a recording to generate a report.")
+        else:
+            st.markdown(f'<div class="cs-label">Patient Report</div>', unsafe_allow_html=True)
+            report_text = f"""PATIENT REPORT
+================
+
+Device / Patient ID: {DEFAULT_DEVICE_ID}
+Recording: {signal_label}
+Generated: {datetime.now().strftime('%Y-%m-%d %H:%M')}
+
+Duration: {view_s:.1f}s
+Heart Rate: {feat['mean_hr']:.1f} bpm
+Signal Quality: {quality}
+
+AI Result: {'Possible AFib' if is_afib else 'Normal Sinus Rhythm'}
+AFib Probability: {prob*100:.1f}%
+Model: {model_choice}
+Decision Threshold: {threshold*100:.0f}%
+
+Contributing Features:
+""" + "\n".join(f"  - {k}: {v*100:.0f}%" for k, v in (reasons or {}).items()) + """
+
+--------------------------------------------------
+This is a research/screening prototype, not a
+certified medical diagnosis. Consult a physician
+for clinical decisions.
+"""
+            st.code(report_text, language=None)
+            rc1, rc2 = st.columns(2)
+            with rc1:
+                st.download_button(
+                    "⬇  Export Report (TXT)",
+                    data=report_text.encode(),
+                    file_name=f"afibai_report_{DEFAULT_DEVICE_ID}.txt",
+                    mime="text/plain",
+                    use_container_width=True,
+                )
+            with rc2:
+                st.download_button(
+                    "⬇  Download HRV Features (CSV)",
+                    data=df_feat.to_csv(index=False).encode(),
+                    file_name="hrv_features.csv",
+                    mime="text/csv",
+                    use_container_width=True,
+                    key="reports_tab_download",
+                )
 
 
 if __name__ == "__main__":
     # Auth gate, in order:
     #   1. License agreement not yet acknowledged → agreement screen
     #   2. Not logged in                                  → login screen
-    #   3. Logged in but no intake                        → medical-info screen
+    #   3. Logged in, patient, no intake yet               → medical-info screen
+    #      (clinicians skip this — see login_screen)
     #   4. Fully authenticated                            → main app.
     if not st.session_state.get("agreement_accepted", False):
         license_agreement_screen()
@@ -2123,7 +2905,8 @@ if __name__ == "__main__":
             login_screen()
         st.stop()
     # Role-based dispatch. Patients get a phone-friendly UI; clinicians get
-    # the full analysis dashboard. The role is set during login and intake.
+    # the full analysis dashboard. The role is set during login (clinicians
+    # go straight to authenticated=True, patients pass through intake first).
     role = st.session_state.get("auth_role") or auth.ROLE_CLINICIAN
     if role == auth.ROLE_PATIENT:
         patient_view()

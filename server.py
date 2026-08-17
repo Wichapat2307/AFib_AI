@@ -19,10 +19,21 @@ Endpoints
   POST /api/alert                     patient phone → server: raise an alert
   GET  /api/alerts                    Streamlit ← server: read + clear alerts
 
+Auth
+----
+  If the AFIBAI_API_KEY environment variable is set, every request must
+  include a matching header:  X-API-Key: <the key>
+  Requests without it (or with a wrong value) get a 401.
+
+  If AFIBAI_API_KEY is NOT set, auth is skipped entirely — this keeps local
+  dev/testing on a closed LAN simple. Once this server is reachable from
+  the public internet, ALWAYS set AFIBAI_API_KEY.
+
 Run
 ---
   python server.py            # default port 5000
   PORT=8080 python server.py  # custom port
+  AFIBAI_API_KEY=xxxxx python server.py   # require auth
 
 Tested with curl while developing, see README_DEPLOY.md for examples.
 """
@@ -39,7 +50,11 @@ from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
 
+import numpy as np
+
 import db  # local file: shared connection layer (local SQLite or Turso)
+import firebase_bridge
+import predict
 
 from flask import Flask, jsonify, request
 
@@ -52,6 +67,9 @@ DB_PATH     = str(APP_DIR / db.HISTORY_DB)  # local mode only; ignored in Turso 
 HOST        = os.environ.get("HOST", "0.0.0.0")
 PORT        = int(os.environ.get("PORT", "5000"))
 
+# Shared-secret auth. See module docstring above.
+API_KEY = os.environ.get("AFIBAI_API_KEY", "").strip()
+
 # How many seconds of ECG to keep in the per-device ring buffer. Anything
 # past this is discarded. Must be at least as long as the longest analysis
 # window the Streamlit app uses (currently 15s) — we keep 30s to be safe.
@@ -62,6 +80,20 @@ LIVE_BUFFER_MAXLEN  = int(LIVE_BUFFER_SECONDS * SAMPLES_PER_SECOND)  # ~3840
 # Recording constraints — prevents a misbehaving client from filling the disk.
 MAX_RECORDING_SECONDS = 600      # 10 minutes per recording
 MAX_DB_BYTES          = 200 * 1024 * 1024   # 200 MB cap on the recordings table
+
+# ── Firebase live-data bridge ───────────────────────────────────────────────
+# When FIREBASE_DB_URL is set, a background thread polls Firebase for ECG
+# chunks the Wio pushes there (instead of, or in addition to, POSTing to
+# /api/wio/upload directly), ingests them into the same ring buffer below,
+# and a second thread periodically runs a prediction and writes the result
+# back to Firebase for the Wio to display. See firebase_bridge.py.
+FIREBASE_DEVICES        = [d.strip() for d in
+                            os.environ.get("AFIBAI_FIREBASE_DEVICES", "wio_01").split(",")
+                            if d.strip()]
+FIREBASE_POLL_INTERVAL  = float(os.environ.get("AFIBAI_FIREBASE_POLL_INTERVAL", "1.0"))
+PREDICT_INTERVAL        = float(os.environ.get("AFIBAI_PREDICT_INTERVAL", "2.0"))
+PREDICT_WINDOW_SECONDS  = predict.SLIDE_WIN_SEC  # trailing window used for live prediction
+PREDICT_MIN_SECONDS     = 5.0   # don't bother predicting on less than this much buffered signal
 
 # Alert table is small (one row per tap of the patient button) so we don't
 # cap it, but we do mark old rows as "consumed" rather than deleting them.
@@ -154,6 +186,20 @@ def init_db():
 app = Flask(__name__)
 
 
+@app.before_request
+def _check_api_key():
+    """Reject requests without a matching X-API-Key header, if AFIBAI_API_KEY
+    is configured. The health-check root ("/") is always open so uptime
+    monitors / load balancers can hit it without a key."""
+    if not API_KEY:
+        return  # auth disabled — local/dev mode
+    if request.path == "/":
+        return
+    supplied = request.headers.get("X-API-Key", "")
+    if supplied != API_KEY:
+        return jsonify({"ok": False, "error": "unauthorized"}), 401
+
+
 @app.route("/")
 def health():
     with _state_lock:
@@ -169,6 +215,40 @@ def health():
 
 
 # ── Wio → server ────────────────────────────────────────────────────────────
+
+def _ingest_chunk(device_id: str, fs: int, samples_f: list[float]) -> dict:
+    """Append a chunk of samples to a device's ring buffer (and its active
+    recording, if any). Shared by the HTTP upload endpoint and the Firebase
+    poller so both paths behave identically. Returns the same info the HTTP
+    endpoint responds with."""
+    now = time.time()
+    state = _device_state(device_id)
+    with _state_lock:
+        state["samples"].extend(samples_f)
+        state["last_ts"] = now
+        state["last_chunk_ts"] = now
+        state["total_samples"] += len(samples_f)
+
+        rec = _active_recordings.get(device_id)
+        if rec is not None:
+            # Append + enforce length cap.
+            rec["samples"].extend(samples_f)
+            elapsed = len(rec["samples"]) / float(rec.get("fs") or fs)
+            if elapsed > MAX_RECORDING_SECONDS:
+                # Auto-stop the recording — server-side safety net.
+                finalize_recording_locked(device_id, reason="max_duration")
+
+        buffer_len = len(state["samples"])
+        recording = device_id in _active_recordings
+
+    return {
+        "ok": True,
+        "device_id": device_id,
+        "accepted": len(samples_f),
+        "buffer_len": buffer_len,
+        "recording": recording,
+    }
+
 
 @app.route("/api/wio/upload", methods=["POST"])
 def wio_upload():
@@ -189,30 +269,7 @@ def wio_upload():
     except (TypeError, ValueError):
         return jsonify({"ok": False, "error": "non-numeric samples"}), 400
 
-    now = time.time()
-    state = _device_state(device_id)
-    with _state_lock:
-        state["samples"].extend(samples_f)
-        state["last_ts"] = now
-        state["last_chunk_ts"] = now
-        state["total_samples"] += len(samples_f)
-
-        rec = _active_recordings.get(device_id)
-        if rec is not None:
-            # Append + enforce length cap.
-            rec["samples"].extend(samples_f)
-            elapsed = len(rec["samples"]) / float(rec.get("fs") or fs)
-            if elapsed > MAX_RECORDING_SECONDS:
-                # Auto-stop the recording — server-side safety net.
-                finalize_recording_locked(device_id, reason="max_duration")
-
-    return jsonify({
-        "ok": True,
-        "device_id": device_id,
-        "accepted": len(samples_f),
-        "buffer_len": len(state["samples"]),
-        "recording": device_id in _active_recordings,
-    })
+    return jsonify(_ingest_chunk(device_id, fs, samples_f))
 
 
 # ── Streamlit ← server (live polling) ───────────────────────────────────────
@@ -439,6 +496,91 @@ def alerts_get():
 
 
 # ═══════════════════════════════════════════════════════════════════════════
+# FIREBASE BRIDGE (Wio ↔ Firebase ↔ this server)
+# ═══════════════════════════════════════════════════════════════════════════
+#
+# device_id → last-seen "seq" from Firebase, so we don't re-ingest the same
+# chunk twice (the Wio overwrites /devices/{id}/live in place each second).
+_firebase_last_seq: dict[str, int] = {}
+
+
+def _firebase_poll_loop():
+    print(f"[afibai-server] firebase poller started, devices={FIREBASE_DEVICES}, "
+          f"interval={FIREBASE_POLL_INTERVAL}s")
+    while True:
+        for device_id in FIREBASE_DEVICES:
+            chunk = firebase_bridge.read_live_chunk(device_id)
+            if chunk:
+                seq = chunk.get("seq")
+                samples = chunk.get("samples")
+                fs = int(chunk.get("fs") or SAMPLES_PER_SECOND)
+                if (isinstance(seq, (int, float)) and isinstance(samples, list) and samples
+                        and seq != _firebase_last_seq.get(device_id)):
+                    try:
+                        samples_f = [float(x) for x in samples]
+                    except (TypeError, ValueError):
+                        samples_f = None
+                    if samples_f:
+                        _ingest_chunk(device_id, fs, samples_f)
+                        _firebase_last_seq[device_id] = seq
+        time.sleep(FIREBASE_POLL_INTERVAL)
+
+
+def _prediction_loop():
+    print(f"[afibai-server] prediction loop started, devices={FIREBASE_DEVICES}, "
+          f"interval={PREDICT_INTERVAL}s, window={PREDICT_WINDOW_SECONDS}s")
+    while True:
+        for device_id in FIREBASE_DEVICES:
+            state = _device_state(device_id)
+            with _state_lock:
+                samples = list(state["samples"])
+                rec = _active_recordings.get(device_id)
+                rec_started_at = rec["started_at"] if rec else None
+                rec_n_samples = len(rec["samples"]) if rec else 0
+                rec_fs = (rec.get("fs") if rec else None) or SAMPLES_PER_SECOND
+
+            if len(samples) >= int(PREDICT_MIN_SECONDS * SAMPLES_PER_SECOND):
+                window_n = int(PREDICT_WINDOW_SECONDS * SAMPLES_PER_SECOND)
+                tail = np.array(samples[-window_n:], dtype=np.float32)
+                try:
+                    result = predict.compute_quick_result(tail, SAMPLES_PER_SECOND, "Ensemble")
+                except Exception as e:
+                    print(f"[afibai-server] prediction failed for {device_id}: {e}")
+                    result = None
+
+                if result is not None:
+                    firebase_bridge.write_result(device_id, {
+                        "label": result["label"],
+                        "prob": result["prob"],
+                        "hr": result["hr"],
+                        "rr_ms": (60000.0 / result["hr"]) if result["hr"] else 0.0,
+                        "quality": result["quality"],
+                        "recording_active": rec is not None,
+                        "recording_elapsed_s": (rec_n_samples / float(rec_fs)) if rec else 0.0,
+                        "updated_at": _now_iso(),
+                        "seq": _firebase_last_seq.get(device_id, 0),
+                    })
+        time.sleep(PREDICT_INTERVAL)
+
+
+def _start_firebase_bridge():
+    """Start the Firebase poller + prediction threads, if configured. Called
+    at import time (not just __main__) so this also runs under gunicorn on
+    Render. If you run multiple gunicorn workers, each will start its own
+    copy of these threads — same caveat as the in-memory ring buffer already
+    has today, so stick to a single worker."""
+    if not firebase_bridge.enabled():
+        print("[afibai-server] FIREBASE_DB_URL not set — Firebase bridge disabled "
+              "(Wio can still POST directly to /api/wio/upload)")
+        return
+    threading.Thread(target=_firebase_poll_loop, daemon=True).start()
+    threading.Thread(target=_prediction_loop, daemon=True).start()
+
+
+_start_firebase_bridge()
+
+
+# ═══════════════════════════════════════════════════════════════════════════
 # ENTRYPOINT
 # ═══════════════════════════════════════════════════════════════════════════
 
@@ -448,5 +590,9 @@ if __name__ == "__main__":
     print(f"[afibai-server] db = {DB_PATH}")
     print(f"[afibai-server] live buffer = {LIVE_BUFFER_SECONDS}s "
           f"({LIVE_BUFFER_MAXLEN} samples)")
+    if API_KEY:
+        print("[afibai-server] auth ENABLED — X-API-Key header required")
+    else:
+        print("[afibai-server] auth DISABLED — set AFIBAI_API_KEY before going public")
     # Threaded so the Wio upload and Streamlit polling don't block each other.
     app.run(host=HOST, port=PORT, threaded=True, debug=False)

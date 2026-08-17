@@ -1,7 +1,14 @@
 # live_wio — Wio Terminal ECG streamer
 
 Arduino sketch for the Seeed Studio **Wio Terminal** that streams ECG samples
-to the AFibAI server.
+to Firebase Realtime Database, and reads the live AFib prediction back from
+Firebase to show on the Wio's own screen. The Wio doesn't talk to `server.py`
+directly at all — `server.py` (running elsewhere) polls Firebase for the ECG
+chunks, runs the model, and writes the result back to Firebase.
+
+```
+AD8232 → Wio (this sketch) → Firebase → server.py (model) → Firebase → Wio LCD
+```
 
 ## What you need
 
@@ -38,8 +45,10 @@ In Arduino IDE:
 
 ### 2. Install libraries
 
-The sketch uses only built-in libraries (`WiFi`, `HTTPClient`). No extra
-installs needed.
+The sketch uses `WiFi` and `HTTPClient` (built in to the Wio Terminal board
+core) plus **`TFT_eSPI`** (a.k.a. `Seeed_Arduino_LCD`) for the on-screen
+status display — install it via **Tools → Manage Libraries → search
+"TFT_eSPI"**.
 
 ### 3. Configure
 
@@ -52,12 +61,16 @@ cp config.example.h config.h
 Edit `config.h`:
 - `WIFI_SSID` — your 2.4 GHz WiFi network name
 - `WIFI_PASS` — your WiFi password
-- `SERVER_URL` — your `server.py` URL. For local dev:
+- `FIREBASE_DB_URL` — your Firebase Realtime Database URL, e.g.
   ```
-  http://192.168.1.42:5000
+  https://your-project-default-rtdb.your-region.firebasedatabase.app
   ```
-  Replace `192.168.1.42` with your laptop's actual IP on the WiFi network.
-  Run `ipconfig` (Windows) or `ifconfig` (mac/Linux) to find it.
+  Find it in the Firebase console under **Realtime Database**. This isn't a
+  secret — the Wio has no credentials at all; instead, the database's
+  security rules are scoped so only `/devices/*` is publicly readable/
+  writable (see the "Firebase setup" section in `README_DEPLOY.md` for the
+  exact rules JSON — set these up before flashing, or the Wio's writes will
+  be rejected).
 
 > Note: `config.h` should be git-ignored — never commit WiFi passwords.
 
@@ -73,9 +86,12 @@ Edit `config.h`:
    [wio] connecting to your-wifi-ssid ......
    [wio] WiFi OK, IP = 192.168.x.x
    [wio] device_id = wio_01
-   [wio] server    = http://192.168.1.42:5000
+   [wio] firebase  = https://your-project-default-rtdb.your-region.firebasedatabase.app
    [wio] fs        = 128
    ```
+   The LCD should immediately show the card layout (Heart Rate, R-R Interval,
+   Signal Quality, AFib Status, ECG trace, Recording Status), starting on
+   `--` placeholders until the first result comes back from Firebase.
 
 If you see `[wio] WiFi FAILED`, double-check the SSID and password (and that
 your router is 2.4 GHz — 5 GHz networks won't work, the ESP32 in the Wio only
@@ -83,7 +99,9 @@ sees 2.4).
 
 ## Verifying it works
 
-With the sketch running and `python server.py` running on your laptop:
+With the sketch running and `server.py` running somewhere with
+`FIREBASE_DB_URL` + credentials set (see `README_DEPLOY.md`'s Firebase setup
+section):
 
 ```bash
 curl http://127.0.0.1:5000/api/wio/status?device_id=wio_01
@@ -99,16 +117,15 @@ You should see:
 }
 ```
 
-Then open the Streamlit app, switch to **Wio Live (Server)** mode, and the
-ECG trace should start scrolling within a couple of seconds.
+This confirms `server.py`'s Firebase poller is picking up what the Wio wrote
+to `/devices/wio_01/live`. Then open the Streamlit app, switch to **Wio Live
+(Server)** mode, and the ECG trace should start scrolling within a couple of
+seconds — Streamlit still only ever talks to `server.py`, unchanged.
 
-## Optional: live trace on the Wio's own screen
-
-The sketch includes commented-out code (search for `setupLcd` and
-`drawStatus`) that draws a status bar and scrolling trace on the Wio's 2.4"
-screen. Uncomment the two call sites in `setup()` and `loop()` and the
-`TFT_eSPI` library usage at the bottom to enable it. You'll need to install
-`TFT_eSPI` from the Arduino library manager.
+On the Wio's own screen, within a few seconds of `server.py`'s prediction
+loop running (`AFIBAI_PREDICT_INTERVAL`, default 2s), the Heart Rate, R-R
+Interval, Signal Quality and AFib Status cards should fill in with real
+values instead of `--`.
 
 ## Sample rate
 
@@ -118,15 +135,16 @@ the analysis window in the app will be mis-sized.
 
 ## Testing without a Wio
 
-If you don't have the hardware yet, run `mock_wio.py` from your laptop:
+If you don't have the hardware yet, run `mock_wio_firebase.py` from your
+laptop — it exercises the exact path the real Wio now uses (Firebase, not a
+direct POST to `server.py`):
 
 ```bash
-python live_wio/mock_wio.py --bpm 75
+python live_wio/mock_wio_firebase.py --db-url https://your-project-default-rtdb.your-region.firebasedatabase.app --bpm 75
 ```
 
-This pushes ECG-shaped samples to the server every second, so you can test
-the full pipeline (server → Streamlit → model → recording history) without
-any hardware.
+(`mock_wio.py`, which POSTs straight to `server.py`, still works too — useful
+if you want to test `server.py`/Streamlit without involving Firebase at all.)
 
 ## Troubleshooting
 
@@ -134,7 +152,9 @@ any hardware.
 |-------------------------------|---------------------------------------------------------|
 | Upload fails                  | Wrong COM port, or board not in "Seeed SAMD" mode        |
 | `[wio] WiFi FAILED`           | 2.4 GHz only; double-check SSID/password                |
-| `[wio] POST failed: ...`      | Server unreachable — check `SERVER_URL` and firewall    |
+| `[wio] PUT live failed: ...`  | Firebase unreachable — check `FIREBASE_DB_URL` and WiFi |
+| `[wio] PUT live → HTTP 401/403` | RTDB rules don't allow public write to `/devices/*` — check the rules JSON |
+| Screen stays on `--`          | `server.py` hasn't written a result yet — confirm it's running with Firebase configured, and that chunks are arriving (`/api/wio/status`) |
 | ECG looks flat in app         | Leads off (electrode detached); re-attach and wait      |
 | ECG is noisy                  | Move away from power supplies; clean electrode contact  |
 

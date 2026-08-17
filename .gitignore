@@ -98,3 +98,11 @@ Thumbs.db
 # ============================================================
 
 live_wio/config.h
+
+# ============================================================
+# FIREBASE CREDENTIALS (service account keys — never commit)
+# ============================================================
+
+*firebase-adminsdk*.json
+firebase_service_account.json
+serviceAccountKey.json

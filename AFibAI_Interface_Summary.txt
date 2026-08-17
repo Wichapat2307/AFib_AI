@@ -1,0 +1,672 @@
+AFibAI SYSTEM INTERFACE — DETAILED SUMMARY
+
+Overall System
+
+The project should have three interfaces serving three different purposes:
+
+Wio = immediate monitoring
+Patient phone = simple understanding + history
+Doctor computer = detailed clinical/research analysis
+
+System flow:
+
+Patient
+  ↓
+ECG electrodes
+  ↓
+AD8232 ECG sensor
+  ↓
+Wio hardware
+  ↓
+ECG data / features
+  ↓
+Server
+  ├── XGBoost
+  ├── CatBoost
+  └── SHAP
+  ↓
+Patient Phone + Doctor Computer
+  ↓
+Turso database
+
+Render hosts the web application.
+
+
+==================================================
+1. WIO INTERFACE — THE DEVICE
+==================================================
+
+Purpose:
+
+The Wio should answer:
+
+"What is happening right now?"
+
+It is the immediate monitoring interface, not the place for detailed analysis.
+
+Wio Main Screen:
+
+- AFibAI
+- ECG Monitoring
+- Heart Rate
+- R-R Interval
+- Signal Quality
+- AFib Status
+- Recording button
+
+Recommended information:
+
+1. Heart Rate
+   Example: HR 78 BPM
+
+2. R-R Interval
+   Example: R-R 820 ms
+
+3. Signal Quality
+   - GOOD
+   - WEAK
+   - POOR
+
+4. AFib Result
+   - NOT DETECTED
+   - POSSIBLE AFib
+
+5. Recording Status
+   - READY
+   - RECORDING
+   - Recording time
+
+During Recording:
+
+- Recording timer
+- Heart rate
+- Signal quality
+- Small real-time ECG preview
+- Stop recording button
+
+After Recording:
+
+- AFib result
+- AFib probability
+- Heart rate
+- Signal quality
+- View details
+- New recording
+
+If SHAP is shown on Wio, keep it very simple.
+
+Example:
+"Why flagged?"
+"R-R irregularity ↑"
+
+Do NOT put these on the Wio:
+
+- Poincare plot
+- Full SHAP graph
+- RMSSD
+- SDNN
+- Model selection
+- XGBoost/CatBoost buttons
+- Dataset information
+- Sampling rate settings
+- CSV controls
+- NPY upload
+- Technical debugging information
+
+
+==================================================
+2. PATIENT PHONE INTERFACE
+==================================================
+
+Purpose:
+
+The patient phone should answer:
+
+"What did my recording mean, and what has happened over time?"
+
+The mobile UI should be simple and easy to use.
+
+Recommended bottom navigation:
+
+- Home
+- Record
+- History
+- Profile
+
+
+------------------------------
+PATIENT — HOME
+------------------------------
+
+Show:
+
+- Current status
+- Heart rate
+- Signal quality
+- Latest recording
+- Start recording button
+
+Example:
+
+CURRENT STATUS
+NORMAL
+
+"No abnormal rhythm detected in your latest recording."
+
+Heart Rate:
+78 BPM
+
+Signal Quality:
+Good
+
+Last Recording:
+Today — 17:42
+
+Button:
+START RECORDING
+
+
+------------------------------
+PATIENT — RECORD
+------------------------------
+
+Step 1: Preparation
+
+Instructions:
+
+1. Sit still
+2. Attach electrodes
+3. Keep your arm still
+4. Follow the electrode placement diagram
+
+Button:
+READY TO RECORD
+
+Step 2: Recording
+
+Show:
+
+- Recording timer
+- Heart rate
+- Signal quality
+- Small ECG waveform
+- Stop recording button
+
+Optional:
+Voice instructions
+
+
+------------------------------
+PATIENT — RESULT
+------------------------------
+
+This is one of the most important screens.
+
+Show:
+
+- Normal / Review
+- AFib probability
+- Heart rate
+- Signal quality
+- ECG
+- Simple explanation
+- Share with doctor
+
+Example:
+
+RESULT:
+POSSIBLE AFib
+
+"Possible irregular rhythm detected."
+
+AFib Probability:
+87%
+
+Heart Rate:
+92 BPM
+
+Signal Quality:
+Good
+
+Buttons:
+
+- VIEW ECG
+- WHY WAS THIS FLAGGED?
+- SHARE WITH DOCTOR
+
+Avoid forcing the patient to interpret technical metrics.
+
+
+------------------------------
+PATIENT — WHY WAS THIS FLAGGED?
+------------------------------
+
+Use patient-friendly XAI.
+
+Example:
+
+"Why was this recording flagged?"
+
+"The AI identified patterns associated with an irregular heart rhythm."
+
+Main contributing factors:
+
+- R-R intervals were irregular
+- Heart-rate variability contributed to the prediction
+
+Optional:
+VIEW TECHNICAL EXPLANATION
+
+
+------------------------------
+PATIENT — HISTORY
+------------------------------
+
+This is where Turso becomes useful.
+
+Show previous recordings.
+
+Example:
+
+TODAY
+17:42 — Normal — 78 BPM
+
+AUG 14
+19:21 — Review — 91 BPM
+
+AUG 12
+08:15 — Normal — 72 BPM
+
+Tapping a recording should show:
+
+- Date/time
+- Result
+- Heart rate
+- Signal quality
+- ECG
+- Explanation
+- Share button
+
+
+------------------------------
+PATIENT — PROFILE
+------------------------------
+
+Keep simple.
+
+Possible items:
+
+- Patient ID
+- Device
+- Notifications
+- Connected device status
+- Privacy
+- Help
+- Legal / Agreement
+- About
+
+
+==================================================
+3. DOCTOR COMPUTER INTERFACE
+==================================================
+
+Purpose:
+
+The doctor interface should answer:
+
+"What exactly did the system detect, what evidence supports it, and how has the patient's data changed over time?"
+
+This is where the current detailed dashboard belongs.
+
+Recommended main sections:
+
+- Dashboard
+- Patients
+- Recordings
+- ECG Analysis
+- HRV
+- AI / XAI
+- Trends
+- Reports
+
+
+------------------------------
+DOCTOR — MAIN DASHBOARD
+------------------------------
+
+Show:
+
+- Total patients
+- Flagged recordings
+- Today's recordings
+- Recent alerts
+
+Example:
+
+Recent Alerts:
+
+P-001 — Possible AFib
+P-009 — Possible AFib
+P-014 — Normal
+
+
+------------------------------
+DOCTOR — PATIENTS
+------------------------------
+
+Patient list:
+
+Patient ID | Status | Last Recording
+
+P-001 | Review | Today 17:42
+P-002 | Normal | Today 16:20
+P-003 | Review | Aug 14
+P-004 | Normal | Aug 14
+
+Include patient search.
+
+
+------------------------------
+DOCTOR — PATIENT OVERVIEW
+------------------------------
+
+Show:
+
+- Latest result
+- AFib probability
+- Heart rate
+- Signal quality
+- Recording date/time
+- Recording duration
+- Previous recordings
+- Number of flagged recordings
+
+Example:
+
+Patient P-001
+
+Latest Result:
+POSSIBLE AFib
+
+AFib Probability:
+98.9%
+
+Heart Rate:
+112 BPM
+
+Signal Quality:
+GOOD
+
+Recording:
+30 seconds
+
+Recent recordings:
+
+Aug 15 — 98.9% — Review
+Aug 14 — 8.2% — Normal
+Aug 12 — 5.1% — Normal
+Aug 10 — 74.2% — Review
+
+
+------------------------------
+DOCTOR — ECG ANALYSIS
+------------------------------
+
+This is where the detailed ECG graph belongs.
+
+Show:
+
+- Raw ECG waveform
+- R-peaks
+- Time selection
+- Zoom
+- Pan
+- Annotations
+
+Time options:
+
+- 30 seconds
+- 1 minute
+- 5 minutes
+
+Also show:
+
+- Heart rate
+- R-peaks detected
+- Signal quality
+
+
+------------------------------
+DOCTOR — HRV ANALYSIS
+------------------------------
+
+Use tabs:
+
+- ECG
+- RR Tachogram
+- Poincare
+- HRV
+
+Show:
+
+- RMSSD
+- SDNN
+- Mean RR
+- Mean HR
+- RR Tachogram
+- Poincare plot
+- Other HRV features
+
+This is where the existing Poincare and RR Tachogram interface fits.
+
+
+------------------------------
+DOCTOR — AI / XAI
+------------------------------
+
+Show:
+
+- AFib probability
+- Classification
+- Model used
+- Decision threshold
+- SHAP feature importance
+
+Example:
+
+AFib Probability:
+98.9%
+
+Classification:
+Possible AFib
+
+Model:
+XGBoost
+
+Decision Threshold:
+30%
+
+SHAP:
+
+R-R irregularity — strongest contribution
+RMSSD — major contribution
+Heart rate — additional contribution
+Other features — smaller contribution
+
+If the final system actually uses an ensemble, model agreement can also be shown.
+
+Example:
+
+XGBoost → AFib
+CatBoost → AFib
+Random Forest → Normal
+
+Final:
+2/3 models → AFib
+
+Only show this if an ensemble is actually being used in the final system.
+
+
+------------------------------
+DOCTOR — TRENDS
+------------------------------
+
+This is a valuable addition.
+
+Allow doctors to see how the patient's data changes over time.
+
+Possible trend metrics:
+
+- AFib probability
+- Heart rate
+- RMSSD
+- SDNN
+- R-R interval
+
+Example:
+
+AFib Probability over time
+
+This allows the doctor to see more than a single recording.
+
+
+------------------------------
+DOCTOR — REPORTS
+------------------------------
+
+Allow a doctor to generate/share a summary.
+
+Example:
+
+PATIENT REPORT
+
+Patient ID: P-001
+
+Recording:
+Aug 15, 2026 — 17:42
+
+Duration:
+30 seconds
+
+Heart Rate:
+112 BPM
+
+Signal Quality:
+Good
+
+AI Result:
+Possible AFib
+
+AFib Probability:
+98.9%
+
+Contributing Features:
+- R-R irregularity
+- HRV features
+- Heart rate
+
+Possible buttons:
+
+- EXPORT REPORT
+- SHARE
+
+
+==================================================
+4. WHERE YOUR CURRENT DASHBOARD FITS
+==================================================
+
+Do not delete the current detailed dashboard.
+
+It is useful as a Doctor / Research mode.
+
+Keep:
+
+- Poincare plot
+- RR Tachogram
+- HRV Features
+- ECG
+- R-peaks
+- RMSSD
+- SDNN
+- SHAP
+- Model information
+- CSV download
+
+But do not make this the first screen a patient sees.
+
+
+==================================================
+5. INFORMATION DISTRIBUTION
+==================================================
+
+Information              Wio   Patient Phone   Doctor Computer
+
+Heart rate                Yes       Yes              Yes
+R-R interval              Yes     Optional           Yes
+ECG preview               Yes       Yes              Yes
+Signal quality            Yes       Yes              Yes
+AFib result               Yes       Yes              Yes
+AFib probability          Yes       Yes              Yes
+Recording timer           Yes       Yes               -
+Recording history          -        Yes              Yes
+Patient trends             -       Simple             Yes
+RMSSD                      -      Optional            Yes
+SDNN                       -         -                Yes
+RR Tachogram               -         -                Yes
+Poincare plot              -         -                Yes
+R-peak analysis            -         -                Yes
+SHAP                       Small    Simple             Full
+Model information           -         -                Yes
+XGBoost/CatBoost comparison -        -                Yes
+Raw ECG analysis            -      Basic              Detailed
+CSV download               -         -                Yes
+PDF report                  -       Share              Yes
+Patient management          -         -                Yes
+Device connection          Yes       Yes                -
+Settings                   Basic      Yes              Yes
+
+
+==================================================
+6. THE THREE INTERFACES IN ONE SENTENCE
+==================================================
+
+Wio:
+
+"Measure me and tell me what is happening right now."
+
+Patient phone:
+
+"Tell me what my result means and show me my history."
+
+Doctor computer:
+
+"Give me the detailed evidence behind the result and the patient's history."
+
+
+==================================================
+7. RECOMMENDED SYSTEM CONCEPT
+==================================================
+
+The system separates information according to the user's needs.
+
+The Wio provides immediate physiological feedback during ECG acquisition.
+
+The patient-facing mobile interface provides simple and understandable results and recording history.
+
+The clinician-facing dashboard provides detailed ECG, HRV, machine-learning and explainability analysis for further review.
+
+
+==================================================
+8. IMPORTANT AI TERMINOLOGY
+==================================================
+
+If your XGBoost/CatBoost models classify the CURRENT ECG recording as AFib vs non-AFib, the interface should say:
+
+- Possible AFib
+- AFib detected by the model
+- AFib probability
+- Recording flagged for review
+
+Do not describe the output as predicting future AFib onset unless the model was specifically trained and validated for future-onset prediction.
+
+Also, the system should be presented as a research/screening prototype rather than a medical diagnosis tool.

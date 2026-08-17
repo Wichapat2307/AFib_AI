@@ -90,7 +90,13 @@ def connect(db_path: str):
         class _Cursor:
             def __init__(self, rs):
                 self._rs = rs
-                self._rows = list(rs.rows) if rs.rows else []
+                # libsql_client rows are .asdict()-compatible but NOT
+                # iterable as (name, value) pairs, so dict(row) raises
+                # TypeError. Convert each row to a plain dict up-front so
+                # downstream code can keep doing dict(row), row["col"],
+                # and iterating freely without caring which backend it is.
+                self._rows = [r.asdict() if hasattr(r, "asdict") else r
+                              for r in (rs.rows or [])]
 
             def fetchone(self):
                 if not self._rows:
@@ -108,6 +114,7 @@ def connect(db_path: str):
             client.close()
     else:
         con = sqlite3.connect(db_path)
+        con.row_factory = sqlite3.Row
         try:
             yield con
             con.commit()

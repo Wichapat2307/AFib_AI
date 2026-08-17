@@ -1,7 +1,20 @@
-# Minimal requirements for server.py (Flask data-relay only).
+# Requirements for server.py.
 # Render uses this; Streamlit Community Cloud keeps using requirements.txt
-# because app.py needs the full ML stack.
+# for app.py.
+#
+# server.py now also runs live predictions (predict.py) on data pulled from
+# Firebase, so — unlike before — it needs the ML stack too, not just Flask.
+# Model loading in predict.py degrades gracefully (falls back to the HRV
+# heuristic) if xgboost/catboost/joblib are missing, but include them so the
+# real ensemble models actually get used server-side.
 
 flask
 gunicorn
 libsql-client
+firebase-admin
+numpy
+scipy
+scikit-learn
+joblib
+xgboost
+catboost
